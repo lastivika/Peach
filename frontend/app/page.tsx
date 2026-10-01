@@ -1,13 +1,17 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { signIn, useSession } from "@/lib/auth";
 export default function LoginPage() {
   const session = useSession();
   const [error, setError] = useState("");
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center gap-6 px-8">
+    <main className="relative mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center gap-6 px-8">
+      <div className="absolute top-6 right-0">
+        <ThemeToggle />
+      </div>
       <span className="text-5xl">🍑</span>
       <h1 className="font-heading text-4xl font-bold">Welcome to Peach</h1>
       <p className="text-muted-foreground">

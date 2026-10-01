@@ -1,12 +1,16 @@
 "use client";
 import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useSession } from "@/lib/auth";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const session = useSession();
   if (!session)
     return (
-      <main className="mx-auto p-12">
+      <main className="mx-auto flex min-h-screen flex-col gap-6 p-12">
+        <div className="flex justify-end">
+          <ThemeToggle />
+        </div>
         <Link href="/">Sign in to open your workspace →</Link>
       </main>
     );

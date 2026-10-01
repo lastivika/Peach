@@ -59,6 +59,7 @@ Resources:
                   - cloudformation:DescribeStacks
                   - cloudformation:DescribeStackEvents
                   - cloudformation:GetTemplate
+                  - cloudformation:GetTemplateSummary
                   - cloudformation:DescribeStackResources
                   - cloudformation:DescribeStackResource
                 Resource:
@@ -125,6 +126,7 @@ Resources:
                   - ec2:DescribeSecurityGroups
                   - ec2:DescribeManagedPrefixLists
                   - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
                   - elasticloadbalancing:DescribeLoadBalancers
                   - elasticloadbalancing:DescribeTargetGroups
                   - elasticloadbalancing:DescribeListeners

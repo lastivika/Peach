@@ -26,14 +26,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${geistMono.variable} dark h-full antialiased`}
+      suppressHydrationWarning
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       {/* Extensions such as Grammarly stamp attributes on <body> before React
           hydrates; this silences that one-level mismatch only. */}
       <body className="flex min-h-full flex-col" suppressHydrationWarning>
         <Providers>
           {children}
-          <Toaster theme="dark" />
+          <Toaster />
         </Providers>
       </body>
     </html>

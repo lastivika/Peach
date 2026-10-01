@@ -6,6 +6,22 @@ import { afterEach, vi } from "vitest";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
+  document.documentElement.classList.remove("dark");
+});
+
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
 });
 
 // jsdom implements neither of these, and Radix relies on both.
