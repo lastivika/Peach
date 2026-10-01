@@ -1,5 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Peach lab backend - ECS Fargate behind an HTTPS Application Load Balancer.
+Description: Peach lab backend - HTTPS CloudFront endpoint forwards to an ALB and ECS Fargate without a purchased domain.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
 Parameters:
   ProjectName:
     Type: String
@@ -16,16 +19,15 @@ Parameters:
     Description: Existing Secrets Manager secret containing the SQLAlchemy database URL.
   ImageUri:
     Type: String
-  ApiDomainName:
+  CloudFrontPrefixListId:
     Type: String
-  CertificateArn:
+    Description: Regional AWS-managed CloudFront origin-facing prefix list.
+  CognitoUserPoolId:
     Type: String
-    Description: Issued ACM certificate for ApiDomainName, in this stack's region.
+  CognitoClientId:
+    Type: String
   CorsOrigins:
     Type: String
-  HostedZoneId:
-    Type: String
-    Default: ""
   DesiredCount:
     Type: Number
     Default: 0
@@ -36,7 +38,6 @@ Parameters:
     Default: ""
     Description: Task definition promoted after its migration task succeeds.
 Conditions:
-  HasZone: !Not [!Equals [!Ref HostedZoneId, ""]]
   HasRelease: !Not [!Equals [!Ref ReleaseTaskDefinition, ""]]
 Resources:
   Cluster:
@@ -52,11 +53,14 @@ Resources:
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Public HTTP redirect and HTTPS ingress
+      GroupDescription: Only CloudFront origin servers can reach the ALB
       VpcId: !Ref VpcId
       SecurityGroupIngress:
-        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}
-        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+        # HTTP origin is the explicit no-domain lab tradeoff; viewer traffic is HTTPS.
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
   TaskSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -126,6 +130,9 @@ Resources:
           Command: [uvicorn, "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
           PortMappings: [{ContainerPort: 8000, Protocol: tcp}]
           Environment:
+            - {Name: COGNITO_REGION, Value: !Ref AWS::Region}
+            - {Name: COGNITO_USER_POOL_ID, Value: !Ref CognitoUserPoolId}
+            - {Name: COGNITO_CLIENT_ID, Value: !Ref CognitoClientId}
             - {Name: APP_ENV, Value: production}
             - {Name: CORS_ORIGINS, Value: !Ref CorsOrigins}
             - {Name: DB_POOLING, Value: "false"}
@@ -168,16 +175,6 @@ Resources:
       Matcher: {HttpCode: "200"}
       TargetGroupAttributes:
         - {Key: deregistration_delay.timeout_seconds, Value: "30"}
-  HttpsListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 443
-      Protocol: HTTPS
-      Certificates: [{CertificateArn: !Ref CertificateArn}]
-      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
-      DefaultActions:
-        - {Type: forward, TargetGroupArn: !Ref TargetGroup}
   HttpListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -185,11 +182,34 @@ Resources:
       Port: 80
       Protocol: HTTP
       DefaultActions:
-        - Type: redirect
-          RedirectConfig: {Protocol: HTTPS, Port: "443", StatusCode: HTTP_301}
+        - {Type: forward, TargetGroupArn: !Ref TargetGroup}
+  ApiDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "${ProjectName} API HTTPS endpoint"
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: api
+            DomainName: !GetAtt LoadBalancer.DNSName
+            CustomOriginConfig:
+              HTTPPort: 80
+              OriginProtocolPolicy: http-only
+        DefaultCacheBehavior:
+          TargetOriginId: api
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          # Never cache API responses; forward headers, cookies and query strings.
+          CachePolicyId: 413f160d-3a3b-4a5a-9e0b-8cf5df2de5b4
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          Compress: true
   Service:
     Type: AWS::ECS::Service
-    DependsOn: [HttpsListener, DatabaseIngress]
+    DependsOn: [HttpListener, DatabaseIngress]
     Properties:
       ServiceName: !Sub "${ProjectName}-backend"
       Cluster: !Ref Cluster
@@ -210,20 +230,11 @@ Resources:
           SecurityGroups: [!Ref TaskSecurityGroup]
       LoadBalancers:
         - {ContainerName: api, ContainerPort: 8000, TargetGroupArn: !Ref TargetGroup}
-  ApiDns:
-    Type: AWS::Route53::RecordSet
-    Condition: HasZone
-    Properties:
-      HostedZoneId: !Ref HostedZoneId
-      Name: !Ref ApiDomainName
-      Type: A
-      AliasTarget:
-        DNSName: !GetAtt LoadBalancer.DNSName
-        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
-        EvaluateTargetHealth: true
 Outputs:
   ApiUrl:
-    Value: !Sub "https://${ApiDomainName}"
+    Value: !Sub "https://${ApiDistribution.DomainName}"
+  ApiDistributionId:
+    Value: !Ref ApiDistribution
   AlbDnsName:
     Value: !GetAtt LoadBalancer.DNSName
   ClusterName:

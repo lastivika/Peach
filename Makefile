@@ -58,7 +58,7 @@ shell-backend: ## Shell into the backend container
 shell-db: ## psql into the database
 	$(COMPOSE) exec db psql -U $${POSTGRES_USER:-peach} -d $${POSTGRES_DB:-peach}
 
-deploy-backend: ## Build a commit-SHA image, migrate once, and roll ECS Fargate behind the HTTPS ALB
+deploy-backend: ## Build a commit-SHA image, migrate once, and roll ECS Fargate behind CloudFront and ALB
 	./scripts/deploy-backend.sh
 
 destroy-backend: ## Delete ECS and ALB (confirmation required); keep the database

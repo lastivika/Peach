@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install cfn-lint==1.57.1
-      - run: cfn-lint infra/ecs-backend.yaml infra/github-oidc.yaml infra/frontend.yaml
+      - run: cfn-lint infra/ecs-backend.yaml infra/github-oidc.yaml infra/frontend.yaml infra/cognito.yaml
       - run: bash -n scripts/*.sh
       - run: python -m unittest discover -s tests -v
 
@@ -97,7 +97,7 @@ jobs:
         run: pnpm format:check
 
       - name: tsc --noEmit
-        run: pnpm exec tsc --noEmit
+        run: pnpm exec next typegen && pnpm exec tsc --noEmit
 
       - name: Tests
         run: pnpm test

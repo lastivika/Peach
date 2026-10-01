@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Peach email sign-in with Cognito hosted login and authorization code PKCE.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+Parameters:
+  ProjectName:
+    Type: String
+    Default: peach
+  SiteUrl:
+    Type: String
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !Sub '${ProjectName}-users'
+      UserPoolTier: ESSENTIALS
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      UsernameConfiguration: {CaseSensitive: false}
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      MfaConfiguration: OPTIONAL
+      EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      AccountRecoverySetting:
+        RecoveryMechanisms: [{Name: verified_email, Priority: 1}]
+  Client:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub '${ProjectName}-web'
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs: [!Sub '${SiteUrl}/callback', 'http://localhost:3000/callback']
+      LogoutURLs: [!Sub '${SiteUrl}/', 'http://localhost:3000/']
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      IdTokenValidity: 1
+      AccessTokenValidity: 1
+      RefreshTokenValidity: 1
+      TokenValidityUnits: {IdToken: hours, AccessToken: hours, RefreshToken: days}
+      RefreshTokenRotation: {Feature: ENABLED, RetryGracePeriodSeconds: 10}
+      ExplicitAuthFlows: [ALLOW_USER_SRP_AUTH]
+  Domain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub '${ProjectName}-${AWS::AccountId}-login'
+      UserPoolId: !Ref UserPool
+      ManagedLoginVersion: 2
+  Branding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientId: !Ref Client
+      UseCognitoProvidedValues: true
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+  ClientId:
+    Value: !Ref Client
+  Domain:
+    Value: !Sub '${Domain}.auth.${AWS::Region}.amazoncognito.com'

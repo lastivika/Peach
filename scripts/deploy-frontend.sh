@@ -63,6 +63,8 @@ API_URL="${BACKEND_URL:-}"
 API_URL="${API_URL%/}"
 [[ -n "${API_URL}" ]] || die "BACKEND_URL is not set in .env - run make deploy-backend first"
 
+COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='ClientId'].OutputValue" --output text)}"
+COGNITO_DOMAIN="${COGNITO_DOMAIN:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='Domain'].OutputValue" --output text)}"
 log "building against ${API_URL}"
 
 # The public API must use HTTPS; browsers block mixed content.
@@ -103,12 +105,19 @@ SITE_URL="$(outputs SiteUrl)"
 
 # --- build ------------------------------------------------------------------
 
-log "installing dependencies"
-(cd "${APP}" && "${PM[@]}" install --frozen-lockfile)
-
-log "building the static export"
-rm -rf "${APP}/out"
-(cd "${APP}" && NEXT_OUTPUT=export NEXT_PUBLIC_API_URL="${API_URL}" "${PM[@]}" build)
+if [[ "${FRONTEND_BUILD_DOCKER:-0}" == 1 ]]; then
+  docker buildx build --target static-export --output "type=local,dest=${APP}/out" \
+    --build-arg NEXT_OUTPUT=export --build-arg "NEXT_PUBLIC_API_URL=${API_URL}" \
+    --build-arg "NEXT_PUBLIC_COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}" \
+    --build-arg "NEXT_PUBLIC_COGNITO_DOMAIN=${COGNITO_DOMAIN}" "${APP}"
+else
+  log "installing dependencies"
+  (cd "${APP}" && "${PM[@]}" install --frozen-lockfile)
+  log "building the static export"
+  (cd "${APP}" && NEXT_OUTPUT=export NEXT_PUBLIC_API_URL="${API_URL}" \
+    NEXT_PUBLIC_COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID}" \
+    NEXT_PUBLIC_COGNITO_DOMAIN="${COGNITO_DOMAIN}" "${PM[@]}" build)
+fi
 [[ -f "${APP}/out/index.html" ]] || die "the export produced no out/index.html"
 
 # --- upload -----------------------------------------------------------------

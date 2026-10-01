@@ -42,10 +42,7 @@ jobs:
           AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
           PROJECT_NAME: ${{ vars.PROJECT_NAME || 'peach' }}
           IMAGE_TAG: ${{ github.sha }}
-          API_DOMAIN_NAME: ${{ vars.API_DOMAIN_NAME }}
-          API_CERTIFICATE_ARN: ${{ vars.API_CERTIFICATE_ARN }}
           API_CORS_ORIGINS: ${{ vars.API_CORS_ORIGINS }}
-          API_HOSTED_ZONE_ID: ${{ vars.API_HOSTED_ZONE_ID }}
           AWS_SUBNET_IDS: ${{ vars.AWS_SUBNET_IDS }}
           AWS_VPC_ID: ${{ vars.AWS_VPC_ID }}
           DATABASE_STACK_NAME: ${{ vars.DATABASE_STACK_NAME }}

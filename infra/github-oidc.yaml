@@ -63,7 +63,9 @@ Resources:
               - Sid: ReadDatabaseStack
                 Effect: Allow
                 Action: [cloudformation:DescribeStacks, cloudformation:DescribeStackResource]
-                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-backend/*"
+                Resource:
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-backend/*"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-cognito/*"
               - Sid: EcrLogin
                 Effect: Allow
                 Action: ecr:GetAuthorizationToken
@@ -116,6 +118,7 @@ Resources:
                 Effect: Allow
                 Action:
                   - ec2:DescribeSecurityGroups
+                  - ec2:DescribeManagedPrefixLists
                   - ec2:DescribeSubnets
                   - elasticloadbalancing:DescribeLoadBalancers
                   - elasticloadbalancing:DescribeTargetGroups

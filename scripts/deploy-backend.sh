@@ -23,20 +23,19 @@ export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
 STACK="${ECS_STACK_NAME:-${PROJECT_NAME}-ecs-backend}"
 DATABASE_STACK="${DATABASE_STACK_NAME:-${PROJECT_NAME}-backend}"
 REPOSITORY="${PROJECT_NAME}-ecs-backend"
-API_DOMAIN_NAME="${API_DOMAIN_NAME:?Set API_DOMAIN_NAME (e.g. api.example.com)}"
-API_CERTIFICATE_ARN="${API_CERTIFICATE_ARN:?Set an issued ACM certificate ARN in AWS_REGION}"
 API_CORS_ORIGINS="${API_CORS_ORIGINS:?Set the deployed frontend HTTPS origin}"
 [[ "${API_CORS_ORIGINS}" != '*' ]] || die "Set API_CORS_ORIGINS to the frontend origin"
 CALLER="$(aws sts get-caller-identity --query Arn --output text)"
 [[ "${CALLER}" != *:root ]] || die "Use a non-root IAM user/role for the lab deployment"
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
-CERT_STATUS="$(aws acm describe-certificate --certificate-arn "${API_CERTIFICATE_ARN}" --query Certificate.Status --output text)"
-[[ "${CERT_STATUS}" == ISSUED ]] || die "API certificate is not issued yet"
 
 output() {
   aws cloudformation describe-stacks --stack-name "$1" \
     --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text
 }
+CF_PREFIX_LIST="$(aws ec2 describe-managed-prefix-lists --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing --query 'PrefixLists[0].PrefixListId' --output text)"
+COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-$(output "${PROJECT_NAME}-cognito" UserPoolId)}"
+COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-$(output "${PROJECT_NAME}-cognito" ClientId)}"
 # Reuse the existing Aurora database; no data is copied or destroyed during migration to ECS.
 DATABASE_URL_SECRET_ARN="${DATABASE_URL_SECRET_ARN:-$(output "${DATABASE_STACK}" DatabaseUrlSecretArn)}"
 DATABASE_SECURITY_GROUP_ID="${DATABASE_SECURITY_GROUP_ID:-$(aws cloudformation describe-stack-resource \
@@ -67,8 +66,9 @@ fi
 # Keep the running service pinned to its previous release while preparing a new task revision.
 PARAMS=("ProjectName=${PROJECT_NAME}" "VpcId=${AWS_VPC_ID}" "SubnetIds=${AWS_SUBNET_IDS}"
   "DatabaseSecurityGroupId=${DATABASE_SECURITY_GROUP_ID}" "DatabaseUrlSecretArn=${DATABASE_URL_SECRET_ARN}"
-  "ImageUri=${IMAGE_URI}" "ApiDomainName=${API_DOMAIN_NAME}" "CertificateArn=${API_CERTIFICATE_ARN}"
-  "CorsOrigins=${API_CORS_ORIGINS}" "HostedZoneId=${API_HOSTED_ZONE_ID:-}")
+  "ImageUri=${IMAGE_URI}" "CloudFrontPrefixListId=${CF_PREFIX_LIST}"
+  "CognitoUserPoolId=${COGNITO_USER_POOL_ID}" "CognitoClientId=${COGNITO_CLIENT_ID}"
+  "CorsOrigins=${API_CORS_ORIGINS}")
 deploy() {
   aws cloudformation deploy --stack-name "${STACK}" --template-file "${ROOT}/infra/ecs-backend.yaml" \
     --parameter-overrides "${PARAMS[@]}" "$@" --capabilities CAPABILITY_NAMED_IAM \
@@ -107,7 +107,7 @@ deploy "ReleaseTaskDefinition=${TASK_DEFINITION}" "DesiredCount=${ECS_DESIRED_CO
 aws ecs wait services-stable --cluster "${CLUSTER}" --services "${SERVICE}"
 LIVE_TASK="$(aws ecs describe-services --cluster "${CLUSTER}" --services "${SERVICE}" --query 'services[0].taskDefinition' --output text)"
 [[ "${LIVE_TASK}" == "${TASK_DEFINITION}" ]] || die "ECS rolled back the release; inspect service events"
-API_URL="https://${API_DOMAIN_NAME}"
+API_URL="$(output "${STACK}" ApiUrl)"
 echo "API: ${API_URL}"
 echo "DNS routing target: $(output "${STACK}" AlbDnsName)"
 curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --max-time 45 "${API_URL}/api/v1/health/ready"

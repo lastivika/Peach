@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,7 +9,7 @@ from app.db import Base
 
 
 class Item(Base):
-    """Placeholder resource: exists to prove the stack end to end, not to model a domain."""
+    """A task on the board. Every item belongs to exactly one user."""
 
     __tablename__ = "items"
     __table_args__ = (
@@ -20,6 +20,12 @@ class Item(Base):
         PGUUID(as_uuid=True),
         primary_key=True,
         server_default=func.gen_random_uuid(),
+    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

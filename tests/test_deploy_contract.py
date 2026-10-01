@@ -26,7 +26,7 @@ elif cmd.startswith('cloudformation describe-stacks'):
     query = args[args.index('--query')+1]
     outputs = {'ClusterName': 'peach-ecs', 'ServiceName': 'peach-backend',
                'TaskDefinitionArn': 'arn:aws:ecs:us-east-1:123456789012:task-definition/peach-backend:2',
-               'TaskSecurityGroupId': 'sg-task', 'AlbDnsName': 'alb.example.com'}
+               'TaskSecurityGroupId': 'sg-task', 'AlbDnsName': 'alb.example.com', 'ApiUrl': 'https://api.example.com'}
     for key, value in outputs.items():
         if key in query:
             print(value)
@@ -60,6 +60,7 @@ class DeployContract(unittest.TestCase):
                 "PATH": str(root / "bin") + os.pathsep + env["PATH"],
                 "CALL_LOG": str(root / "calls.jsonl"), "SCENARIO": scenario,
                 "API_DOMAIN_NAME": "api.example.com", "API_CERTIFICATE_ARN": "arn:test",
+                "COGNITO_USER_POOL_ID": "pool", "COGNITO_CLIENT_ID": "client",
                 "API_CORS_ORIGINS": "https://app.example.com", "IMAGE_TAG": SHA,
                 "DATABASE_URL_SECRET_ARN": "arn:secret", "DATABASE_SECURITY_GROUP_ID": "sg-db",
                 "AWS_VPC_ID": "vpc-test", "AWS_SUBNET_IDS": "subnet-a,subnet-b",
