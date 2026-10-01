@@ -140,6 +140,9 @@ Resources:
                   - ec2:DescribeSubnets
                   - ec2:DescribeVpcs
                   - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeCapacityReservation
+                  - elasticloadbalancing:DescribeTags
                   - elasticloadbalancing:DescribeTargetGroups
                   - elasticloadbalancing:DescribeListeners
                   - elasticloadbalancing:DescribeTargetHealth
