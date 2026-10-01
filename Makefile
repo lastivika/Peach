@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: help up down build logs ps migrate revision test test-backend test-frontend lint fmt clean shell-backend shell-db deploy-backend destroy-backend logs-backend migrate-backend cert domain deploy-frontend destroy-frontend github-role
+.PHONY: cert-api deploy-lambda destroy-database help up down build logs ps migrate revision test test-backend test-frontend lint fmt clean shell-backend shell-db deploy-backend destroy-backend logs-backend migrate-backend cert domain deploy-frontend destroy-frontend github-role
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -29,7 +29,12 @@ migrate: ## Apply migrations
 revision: ## Autogenerate a migration: make revision m="add x"
 	$(COMPOSE) exec backend alembic revision --autogenerate -m "$(m)"
 
-test: test-backend test-frontend ## Run all tests
+.PHONY: test-deploy
+
+test: test-backend test-frontend test-deploy ## Run all tests
+
+test-deploy: ## Test deployment safety without calling AWS
+	python3 -m unittest discover -s tests -v
 
 test-backend: ## Run backend tests
 	$(COMPOSE) exec backend pytest
@@ -38,8 +43,10 @@ test-frontend: ## Run frontend tests
 	$(COMPOSE) exec frontend pnpm test
 
 lint: ## Lint both sides
-	$(COMPOSE) exec backend ruff check .
-	$(COMPOSE) exec frontend pnpm lint
+	$(COMPOSE) exec -T backend ruff check .
+	$(COMPOSE) exec -T backend ruff format --check .
+	$(COMPOSE) exec -T frontend pnpm lint
+	$(COMPOSE) exec -T frontend pnpm format:check
 
 fmt: ## Format both sides
 	$(COMPOSE) exec backend ruff format .
@@ -51,18 +58,25 @@ shell-backend: ## Shell into the backend container
 shell-db: ## psql into the database
 	$(COMPOSE) exec db psql -U $${POSTGRES_USER:-peach} -d $${POSTGRES_DB:-peach}
 
-deploy-backend: ## Build + push the image, roll the Lambda (function URL + Aurora), migrate, write BACKEND_URL to .env
+deploy-backend: ## Build a commit-SHA image, migrate once, and roll ECS Fargate behind the HTTPS ALB
 	./scripts/deploy-backend.sh
 
-destroy-backend: ## Delete the backend stack, Aurora cluster included
+destroy-backend: ## Delete ECS and ALB (confirmation required); keep the database
+	./scripts/ecs-admin.sh destroy
+
+destroy-database: ## Delete the legacy Lambda/database stack and its data (confirmation required)
 	./scripts/destroy-backend.sh
 
-logs-backend: ## Tail the deployed backend's CloudWatch logs
-	aws logs tail /aws/lambda/$${PROJECT_NAME:-peach}-backend --follow --since 10m
+logs-backend: ## Tail ECS application and migration logs
+	./scripts/ecs-admin.sh logs
 
-migrate-backend: ## Re-run migrations on the deployed backend (deploy-backend already does)
-	aws lambda invoke --function-name $${PROJECT_NAME:-peach}-backend \
-		--cli-binary-format raw-in-base64-out --payload '{"action":"migrate"}' /dev/stdout
+migrate-backend: deploy-backend ## Run the deployment contract, including the migration task
+
+cert-api: ## Request the regional ACM API certificate and print its validation CNAME
+	./scripts/cert-api.sh
+
+deploy-lambda: ## Legacy deployment retained for rollback; not the lab backend
+	./scripts/deploy-lambda.sh
 
 cert: ## Request + DNS-validate a us-east-1 certificate for the frontend: make cert DOMAIN=app.example.com
 	./scripts/domain-frontend.sh cert

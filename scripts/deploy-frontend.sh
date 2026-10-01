@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# .env is local configuration; backticks inside JMESPath queries are literals.
+# shellcheck disable=SC1091,SC2016
 # Build the Next.js static export and put it behind CloudFront.
 #
 # The API URL is compiled into the bundle - NEXT_PUBLIC_* is substituted at
@@ -43,14 +45,14 @@ for tool in aws node; do
 done
 aws sts get-caller-identity >/dev/null 2>&1 \
   || die "no usable AWS credentials - set AWS_PROFILE or the AWS_* keys in .env"
+CALLER="$(aws sts get-caller-identity --query Arn --output text)"
+[[ "${CALLER}" != *:root ]] || die "Use a non-root IAM user or role for deployment"
 
 # package.json pins pnpm, which may or may not be on PATH.
-if command -v pnpm >/dev/null 2>&1; then
+if command -v pnpm >/dev/null 2>&1 && [[ "$(pnpm --version)" == "10.34.5" ]]; then
   PM=(pnpm)
-elif command -v corepack >/dev/null 2>&1; then
-  PM=(corepack pnpm)
 else
-  PM=(npx --yes pnpm@10)
+  PM=(npx --yes pnpm@10.34.5)
 fi
 
 # --- which API does this build talk to? -------------------------------------
@@ -63,7 +65,7 @@ API_URL="${API_URL%/}"
 
 log "building against ${API_URL}"
 
-# The function URL is always HTTPS; plain HTTP here means a hand-edited .env.
+# The public API must use HTTPS; browsers block mixed content.
 [[ "${API_URL}" == https://* ]] \
   || die "BACKEND_URL must be https:// - browsers block an HTTPS page calling HTTP"
 

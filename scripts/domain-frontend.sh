@@ -59,6 +59,8 @@ for tool in aws python3; do
 done
 aws sts get-caller-identity >/dev/null 2>&1 \
   || die "no usable AWS credentials - set AWS_PROFILE or the AWS_* keys in .env"
+CALLER="$(aws sts get-caller-identity --query Arn --output text)"
+[[ "${CALLER}" != *:root ]] || die "Use a non-root IAM user or role for deployment"
 
 # --- helpers ----------------------------------------------------------------
 

@@ -1,18 +1,46 @@
-name: Lint
+name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
 
 concurrency:
   group: lint-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend (ruff)
+  infrastructure:
+    name: Infrastructure and deploy contract
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install cfn-lint==1.57.1
+      - run: cfn-lint infra/ecs-backend.yaml infra/github-oidc.yaml infra/frontend.yaml
+      - run: bash -n scripts/*.sh
+      - run: python -m unittest discover -s tests -v
+
+  backend:
+    name: Backend (ruff + tests)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: peach
+          POSTGRES_PASSWORD: peach
+          POSTGRES_DB: peach_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U peach -d peach_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://peach:peach@localhost:5432/peach_test
     defaults:
       run:
         working-directory: backend
@@ -36,6 +64,9 @@ jobs:
 
       - name: ruff format --check
         run: uv run ruff format --check --diff .
+
+      - name: Tests
+        run: uv run pytest
 
   frontend:
     name: Frontend (eslint + prettier)
@@ -67,3 +98,12 @@ jobs:
 
       - name: tsc --noEmit
         run: pnpm exec tsc --noEmit
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Production build
+        run: pnpm build
+        env:
+          NEXT_OUTPUT: export
+          NEXT_PUBLIC_API_URL: https://api.example.com

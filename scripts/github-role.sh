@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# .env is local configuration; backticks inside JMESPath queries are literals.
+# shellcheck disable=SC1091,SC2016
 # Create the IAM role GitHub Actions assumes to deploy, and point the
 # repository at it. No access key is created or stored anywhere.
 set -euo pipefail
@@ -36,18 +38,13 @@ aws sts get-caller-identity >/dev/null 2>&1 \
 
 # --- which repository ---------------------------------------------------------
 
-REPO="${GITHUB_REPO:-}"
-if [[ -z "${REPO}" ]]; then
-  ORIGIN="$(git -C "${ROOT}" remote get-url origin 2>/dev/null || true)"
-  # Both git@github.com:owner/repo.git and https://github.com/owner/repo.git
-  REPO="$(printf '%s' "${ORIGIN}" | sed -E 's#^.*github\.com[:/]##; s#\.git$##')"
-fi
-[[ "${REPO}" == */* ]] || die "could not work out the repo - set GITHUB_REPO=owner/repo in .env"
-
-SUBJECT_CLAIM="${GITHUB_SUBJECT_CLAIM:-ref:refs/heads/main}"
-
-log "repository ${REPO}"
-log "trusting only runs matching repo:${REPO}:${SUBJECT_CLAIM}"
+REPO="${GITHUB_REPO:?Set GITHUB_REPO explicitly to your own owner/repository}"
+[[ "${REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "invalid GITHUB_REPO"
+CALLER="$(aws sts get-caller-identity --query Arn --output text)"
+[[ "${CALLER}" != *:root ]] || die "Use your non-root IAM administrator for bootstrap"
+DISTRIBUTION_ID="$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-frontend" \
+  --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)"
+log "trusting only repo:${REPO}:ref:refs/heads/main"
 
 # --- the account may already have a GitHub provider ---------------------------
 
@@ -56,6 +53,14 @@ EXISTING_PROVIDER="$(aws iam list-open-id-connect-providers \
   --query "OpenIDConnectProviderList[?contains(Arn, 'token.actions.githubusercontent.com')]|[0].Arn" \
   --output text 2>/dev/null || true)"
 [[ "${EXISTING_PROVIDER}" == "None" ]] && EXISTING_PROVIDER=""
+# Keep a provider owned by this stack under its original logical resource.
+OWNED_PROVIDER="$(aws cloudformation describe-stack-resource --stack-name "${STACK_NAME}" \
+  --logical-resource-id OidcProvider --query StackResourceDetail.PhysicalResourceId \
+  --output text 2>/dev/null || true)"
+if [[ -n "${OWNED_PROVIDER}" && "${OWNED_PROVIDER}" == "${EXISTING_PROVIDER}" ]]; then
+  EXISTING_PROVIDER=""
+fi
+
 
 if [[ -n "${EXISTING_PROVIDER}" ]]; then
   log "reusing the GitHub OIDC provider already in this account"
@@ -71,7 +76,7 @@ if ! aws cloudformation deploy \
   --parameter-overrides \
     "ProjectName=${PROJECT_NAME}" \
     "GitHubRepo=${REPO}" \
-    "SubjectClaim=${SUBJECT_CLAIM}" \
+    "FrontendDistributionId=${DISTRIBUTION_ID}" \
     "ExistingProviderArn=${EXISTING_PROVIDER}" \
   --capabilities CAPABILITY_NAMED_IAM \
   --no-fail-on-empty-changeset \
@@ -97,7 +102,7 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   gh variable set AWS_DEPLOY_ROLE_ARN --repo "${REPO}" --body "${ROLE_ARN}"
   gh variable set AWS_REGION --repo "${REPO}" --body "${AWS_REGION}"
   echo
-  echo "  Done. Write \"deploy\" in a commit message on main and the backend ships."
+  echo "  Done. Every passing push to main deploys the backend and frontend."
 else
   echo
   echo "  gh is not installed or not logged in. Set these two repository"
