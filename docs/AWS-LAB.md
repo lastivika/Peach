@@ -64,3 +64,8 @@ the legacy stack and database data: back up needed data first. Cognito's user po
 and historical task definitions are retained; remove them explicitly only when no
 longer needed. Delete unused ECR images/repositories and the GitHub OIDC role/provider
 only after confirming no other workload uses them.
+
+## CI evidence
+
+- Green checks before the demonstration: https://github.com/lastivika/Peach/actions/runs/36833755064
+- Intentional red Ruff run (unused import): https://github.com/lastivika/Peach/actions/runs/36833972218
