@@ -136,6 +136,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #191919;
   --foreground: #ededec;
   --card: #202020;
