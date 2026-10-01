@@ -14,6 +14,8 @@ Parameters:
   ExistingProviderArn:
     Type: String
     Default: ""
+  ApiDistributionId:
+    Type: String
   FrontendDistributionId:
     Type: String
 Conditions:
@@ -111,6 +113,16 @@ Resources:
                   - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ProjectName}-ecs/${ProjectName}-backend"
                   - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/${ProjectName}-ecs/*"
                   - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/${ProjectName}-backend:*"
+              - Sid: ReadExistingTaskRoles
+                Effect: Allow
+                Action: [iam:GetRole, iam:GetRolePolicy, iam:ListRolePolicies, iam:ListAttachedRolePolicies, iam:ListRoleTags]
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-ecs-execution"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/${ProjectName}-ecs-task"
+              - Sid: ReadApiDistribution
+                Effect: Allow
+                Action: [cloudfront:GetDistribution, cloudfront:GetDistributionConfig, cloudfront:ListTagsForResource]
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${ApiDistributionId}"
               - Sid: PassOnlyTaskRoles
                 Effect: Allow
                 Action: iam:PassRole

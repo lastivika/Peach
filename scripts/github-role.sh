@@ -84,6 +84,7 @@ if ! aws cloudformation deploy \
     "GitHubRepo=${REPO}" \
     "GitHubSubject=${GITHUB_OIDC_SUBJECT}" \
     "FrontendDistributionId=${DISTRIBUTION_ID}" \
+    "ApiDistributionId=$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-ecs-backend" --query "Stacks[0].Outputs[?OutputKey=='ApiDistributionId'].OutputValue" --output text)" \
     "ExistingProviderArn=${EXISTING_PROVIDER}" \
   --capabilities CAPABILITY_NAMED_IAM \
   --no-fail-on-empty-changeset \
