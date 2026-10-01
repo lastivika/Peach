@@ -319,7 +319,7 @@ Resources:
     Type: AWS::Lambda::Url
     Properties:
       TargetFunctionArn: !Ref Function
-      AuthType: NONE
+      AuthType: AWS_IAM
 
   # A public function URL needs both grants: InvokeFunctionUrl, and
   # InvokeFunction limited to calls that came through the URL.

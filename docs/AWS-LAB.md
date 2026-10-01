@@ -36,7 +36,7 @@ circuit breaker. Rollback: set IMAGE_TAG to an existing known-good SHA and run
 `make deploy-backend`; database schema must remain compatible.
 
 OIDC trust requires audience `sts.amazonaws.com` and exactly
-`repo:lastivika/Peach:ref:refs/heads/main`. No AWS access keys belong in GitHub secrets.
+`repo:lastivika@102419987/Peach@1399359780:ref:refs/heads/main`. No AWS access keys belong in GitHub secrets.
 CI can pass only the two ECS task roles; infrastructure bootstrap uses the personal
 IAM administrator. An unrelated repository or branch cannot assume the deploy role.
 
@@ -69,3 +69,6 @@ only after confirming no other workload uses them.
 
 - Green checks before the demonstration: https://github.com/lastivika/Peach/actions/runs/36833755064
 - Intentional red Ruff run (unused import): https://github.com/lastivika/Peach/actions/runs/36833972218
+
+The retired Lambda URL requires AWS IAM authentication; it is no longer a public
+route to the database. The database stack remains because it owns Aurora.

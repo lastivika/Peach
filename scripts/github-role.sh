@@ -44,7 +44,13 @@ CALLER="$(aws sts get-caller-identity --query Arn --output text)"
 [[ "${CALLER}" != *:root ]] || die "Use your non-root IAM administrator for bootstrap"
 DISTRIBUTION_ID="$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-frontend" \
   --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)"
-log "trusting only repo:${REPO}:ref:refs/heads/main"
+if [[ -z "${GITHUB_OIDC_SUBJECT:-}" ]]; then
+  command -v gh >/dev/null || die "Set GITHUB_OIDC_SUBJECT to the exact repository/main subject"
+  OWNER_ID="$(gh api "repos/${REPO}" --jq '.owner.id')"
+  REPO_ID="$(gh api "repos/${REPO}" --jq '.id')"
+  GITHUB_OIDC_SUBJECT="repo:${REPO%/*}@${OWNER_ID}/${REPO#*/}@${REPO_ID}:ref:refs/heads/main"
+fi
+log "trusting only ${GITHUB_OIDC_SUBJECT}"
 
 # --- the account may already have a GitHub provider ---------------------------
 
@@ -76,6 +82,7 @@ if ! aws cloudformation deploy \
   --parameter-overrides \
     "ProjectName=${PROJECT_NAME}" \
     "GitHubRepo=${REPO}" \
+    "GitHubSubject=${GITHUB_OIDC_SUBJECT}" \
     "FrontendDistributionId=${DISTRIBUTION_ID}" \
     "ExistingProviderArn=${EXISTING_PROVIDER}" \
   --capabilities CAPABILITY_NAMED_IAM \

@@ -7,6 +7,10 @@ Parameters:
   GitHubRepo:
     Type: String
     AllowedPattern: "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+  GitHubSubject:
+    Type: String
+    Description: Exact GitHub OIDC subject, including immutable IDs when enabled.
+    AllowedPattern: '^repo:[A-Za-z0-9_.@/-]+:ref:refs/heads/main$'
   ExistingProviderArn:
     Type: String
     Default: ""
@@ -28,6 +32,7 @@ Resources:
     Properties:
       RoleName: !Sub "${ProjectName}-github-deploy"
       MaxSessionDuration: 3600
+      Tags: [{Key: Repository, Value: !Ref GitHubRepo}]
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -38,7 +43,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+                token.actions.githubusercontent.com:sub: !Ref GitHubSubject
       Policies:
         - PolicyName: deploy-peach
           PolicyDocument:
@@ -145,4 +150,4 @@ Outputs:
   RoleArn:
     Value: !GetAtt DeployRole.Arn
   Subject:
-    Value: !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+    Value: !Ref GitHubSubject
