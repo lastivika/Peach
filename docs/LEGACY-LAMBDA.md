@@ -389,12 +389,13 @@ keys). Everything else is optional: left blank, the script uses the default VPC 
 skipping AZs Lambda cannot use (`use1-az3`). The first deploy takes about ten minutes, almost all
 of it Aurora.
 
-**Aurora scales to zero.** The cluster runs Aurora PostgreSQL 17.4 on one `db.serverless` instance
-with `MinCapacity: 0`: after `DB_SECONDS_UNTIL_AUTO_PAUSE` (300 s) without connections it pauses and
-bills only storage. The first request after a pause waits ~15 s while it resumes, well inside the
-function's 30 s timeout. For it to pause at all nothing may hold a connection, so on Lambda the app
-runs with `DB_POOLING=false` (SQLAlchemy `NullPool`): each request opens and closes its own
-connection instead of a warm environment keeping one open.
+**Aurora capacity floor.** The cluster runs Aurora PostgreSQL 17.4 on one `db.serverless` instance.
+The default `DB_MIN_CAPACITY` is 0.5 ACU, which keeps readiness checks from waiting for a paused
+cluster to resume. Setting it to `0` opts into auto-pause after `DB_SECONDS_UNTIL_AUTO_PAUSE`
+(300 s); idle billing then falls to storage, but the first request can take longer than the API's
+30 s timeout. For auto-pause to work, nothing may hold a connection, so on Lambda the app runs with
+`DB_POOLING=false` (SQLAlchemy `NullPool`): each request opens and closes its own connection instead
+of a warm environment keeping one open.
 
 **No NAT gateway.** The function sits in the VPC only to reach Aurora and needs nothing from the
 internet, so the default subnets do. The flip side is that it cannot reach Secrets Manager, so
@@ -410,7 +411,7 @@ from there on later deploys rather than rotated.
 | | Idle | Per use |
 |---|---|---|
 | Lambda (512 MB, arm64) | $0 | free tier: 1M requests + 400k GB-s a month |
-| Aurora Serverless v2 | storage only, ~$0.10/GB-month | ~$0.12 per ACU-hour while awake (max 1 ACU) |
+| Aurora Serverless v2 | 0.5 ACU plus storage by default; storage only when auto-paused | ~$0.12 per ACU-hour while active (max 1 ACU) |
 | Secrets Manager (one secret) | $0.40 | — |
 | ECR, CloudWatch Logs | ~$0 at this size | — |
 

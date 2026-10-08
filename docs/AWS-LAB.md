@@ -11,13 +11,16 @@ not satisfy the assignment's custom-domain ACM certificate and ALB HTTPS listene
 step. Viewer HTTPS and HTTP-to-HTTPS redirects are provided by CloudFront.
 The API distribution disables caching and forwards authorization and query strings.
 
-Cognito hosted login uses authorization code + PKCE, state and nonce, with email
-verification. The browser stores the OIDC session in `sessionStorage` (not
-`localStorage`) and silently renews tokens while that tab remains open. Cognito
-rotates refresh tokens; closing the tab ends the browser session. The API
-validates JWT signature, issuer, audience, expiry, token use and verified email.
-Queries enforce ownership; another user's item returns 404. Existing legacy
-items are preserved with no owner and do not appear in a new user's board.
+Cognito managed login supports email/password and Google with authorization
+code + PKCE, state and nonce. The browser stores the OIDC session in
+`sessionStorage` (not `localStorage`) and silently renews tokens while that tab
+remains open. Cognito rotates refresh tokens; closing the tab ends the browser
+session. The API validates JWT signature, issuer, audience, expiry and token use;
+the lab intentionally does not require `email_verified=true`. Peach identifies
+users by Cognito `sub`, not email, so separate Cognito profiles with the same
+email remain separate Peach users unless explicitly linked. Queries enforce
+ownership; another user's item returns 404. Existing legacy items are preserved
+with no owner and do not appear in a new user's board.
 
 ## Reproduce deployment
 

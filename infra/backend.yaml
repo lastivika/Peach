@@ -2,17 +2,22 @@ AWSTemplateFormatVersion: "2010-09-09"
 
 Description: >-
   Peach backend on AWS Lambda: the FastAPI app in a container image, served over
-  HTTPS by a Lambda function URL, with Postgres on Aurora Serverless v2 that
-  pauses to zero ACUs when idle. Deployed by scripts/deploy-backend.sh, which
-  builds and pushes the image first - the ECR repository lives outside this
-  stack because the function cannot be created until an image exists.
+  HTTPS by a Lambda function URL, with Postgres on Aurora Serverless v2 held at
+  0.5 ACUs by default to avoid cold-start delays. Auto-pause remains opt-in by
+  setting the minimum capacity to zero. Deployed by scripts/deploy-backend.sh,
+  which builds and pushes the image first - the ECR repository lives outside
+  this stack because the function cannot be created until an image exists.
 
-  Idle, this costs Aurora storage and nothing else: Lambda bills per request,
-  and the cluster pauses after SecondsUntilAutoPause without connections. The
-  first request after a pause waits roughly 15 seconds for it to resume.
+  At the default capacity floor Aurora bills compute and storage even when idle.
+  Setting the minimum capacity to zero enables auto-pause and storage-only idle
+  billing, with a resume delay on the first subsequent database request.
 
   No custom domain: the API is served on the function URL's own HTTPS name.
   Only the frontend takes a custom domain.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
 
 Parameters:
   ProjectName:
@@ -54,7 +59,7 @@ Parameters:
     MinValue: 3
     MaxValue: 900
     Description: >-
-      Leaves room for Aurora to resume from a pause (about 15 seconds).
+      Leaves room for Aurora to resume when DbMinCapacity is set to zero.
 
   DbName:
     Type: String
@@ -81,9 +86,10 @@ Parameters:
 
   DbMinCapacity:
     Type: Number
-    Default: 0
+    Default: 0.5
     MinValue: 0
-    Description: ACUs. 0 lets the cluster pause when nothing is connected.
+    Description: >-
+      ACUs. The default 0.5 keeps the database available; 0 enables auto-pause.
 
   DbMaxCapacity:
     Type: Number
@@ -96,7 +102,8 @@ Parameters:
     Default: 300
     MinValue: 300
     MaxValue: 86400
-    Description: Idle time, with no connections, before the cluster pauses.
+    Description: >-
+      Idle time before auto-pause; used only when DbMinCapacity is zero.
 
   DbBackupRetentionDays:
     Type: Number
@@ -142,6 +149,9 @@ Parameters:
     Default: 7
     Description: CloudWatch gives 5 GB of ingestion and storage free each month.
 
+Conditions:
+  DbAutoPauseEnabled: !Equals [!Ref DbMinCapacity, "0"]
+
 Resources:
   # --- networking ---------------------------------------------------------
 
@@ -185,10 +195,16 @@ Resources:
           Value: !Ref ProjectName
 
   # A starter database: one serverless instance, never reachable from the
-  # internet, and torn down with the stack. Turn on DeletionProtection before
-  # this holds anything you would miss.
+  # internet, and torn down with the stack. The default 0.5 ACU floor keeps it
+  # available for readiness checks; zero opts back into auto-pause.
   DbCluster:
     Type: AWS::RDS::DBCluster
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Keep the shared Aurora database warm enough for ECS readiness checks to avoid origin timeouts.
+        must:
+          - Preserve encrypted storage and private database access.
+          - Keep auto-pause opt-in; the default minimum capacity is 0.5 ACUs.
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -207,7 +223,10 @@ Resources:
       ServerlessV2ScalingConfiguration:
         MinCapacity: !Ref DbMinCapacity
         MaxCapacity: !Ref DbMaxCapacity
-        SecondsUntilAutoPause: !Ref DbSecondsUntilAutoPause
+        SecondsUntilAutoPause: !If
+          - DbAutoPauseEnabled
+          - !Ref DbSecondsUntilAutoPause
+          - !Ref AWS::NoValue
       Tags:
         - Key: PROJECT_NAME
           Value: !Ref ProjectName
