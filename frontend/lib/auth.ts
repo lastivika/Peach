@@ -1,124 +1,97 @@
 "use client";
-import { useSyncExternalStore } from "react";
-const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? "";
-const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN ?? "";
-type Session = { token: string; email: string; name: string; expires: number };
-let cached: Session | null = null;
-let loaded = false;
-const listeners = new Set<() => void>();
-function publish(value: Session | null) {
-  cached = value;
-  loaded = true;
-  if (value) sessionStorage.setItem("peach-session", JSON.stringify(value));
-  else sessionStorage.removeItem("peach-session");
-  listeners.forEach((fn) => fn());
+
+import { createContext, useContext } from "react";
+import type { User, UserManager } from "oidc-client-ts";
+
+export const cognitoRegion =
+  process.env.NEXT_PUBLIC_COGNITO_REGION ?? "us-east-1";
+export const cognitoUserPoolId =
+  process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
+export const cognitoClientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? "";
+export const cognitoDomain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN ?? "";
+
+export const cognitoAuthority = cognitoUserPoolId
+  ? `https://cognito-idp.${cognitoRegion}.amazonaws.com/${cognitoUserPoolId}`
+  : "";
+
+export type Session = {
+  token: string;
+  email: string;
+  name: string;
+  expires: number;
+};
+
+type AuthState = {
+  isLoading: boolean;
+  session: Session | null;
+  error: Error | null;
+  signIn: () => Promise<void>;
+  signOut: () => Promise<void>;
+};
+
+export const AuthStateContext = createContext<AuthState>({
+  isLoading: false,
+  session: null,
+  error: null,
+  signIn: async () => {
+    throw new Error("Cognito sign-in is not configured.");
+  },
+  signOut: async () => {
+    throw new Error("Cognito sign-in is not configured.");
+  },
+});
+
+export function useAuthState() {
+  return useContext(AuthStateContext);
 }
-function snapshot() {
-  if (!loaded && typeof window !== "undefined") {
-    loaded = true;
-    try {
-      cached = JSON.parse(sessionStorage.getItem("peach-session") ?? "null");
-    } catch {
-      cached = null;
-    }
+
+export function useSession(): Session | null {
+  return useAuthState().session;
+}
+
+let authManager: UserManager | null = null;
+
+export function registerAuthManager(manager: UserManager) {
+  authManager = manager;
+}
+
+export function unregisterAuthManager(manager: UserManager) {
+  if (authManager === manager) authManager = null;
+}
+
+export async function getIdToken(): Promise<string | null> {
+  if (!authManager) return null;
+  const user = await authManager.getUser();
+  if (!user || user.expired) return null;
+  return user.id_token || null;
+}
+
+export async function signOut(): Promise<void> {
+  await authManager?.removeUser();
+}
+
+export function cognitoLogoutUrl(origin: string): string {
+  if (!cognitoClientId || !cognitoDomain) {
+    throw new Error("Cognito logout is not configured.");
   }
-  return cached;
-}
-export function useSession() {
-  return useSyncExternalStore(
-    (fn) => {
-      listeners.add(fn);
-      return () => {
-        listeners.delete(fn);
-      };
-    },
-    snapshot,
-    () => null,
-  );
-}
-export async function getIdToken() {
-  const session = snapshot();
-  if (!session || session.expires <= Date.now()) return null;
-  return session.token;
-}
-export function signOut() {
-  publish(null);
-}
-function base64url(bytes: Uint8Array) {
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replaceAll("=", "");
-}
-export async function signIn() {
-  if (!clientId || !domain) throw new Error("Sign-in is not configured yet.");
-  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
-  const state = base64url(crypto.getRandomValues(new Uint8Array(24)));
-  const nonce = base64url(crypto.getRandomValues(new Uint8Array(24)));
-  sessionStorage.setItem(
-    "peach-oauth",
-    JSON.stringify({ verifier, state, nonce }),
-  );
-  const challenge = base64url(
-    new Uint8Array(
-      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
-    ),
-  );
+  const domain = cognitoDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   const query = new URLSearchParams({
-    client_id: clientId,
-    response_type: "code",
-    scope: "openid email profile",
-    redirect_uri: location.origin + "/callback",
-    code_challenge_method: "S256",
-    code_challenge: challenge,
-    state,
-    nonce,
+    client_id: cognitoClientId,
+    logout_uri: `${origin}/`,
   });
-  location.assign(`https://${domain}/oauth2/authorize?${query}`);
+  return `https://${domain}/logout?${query}`;
 }
-export async function completeSignIn() {
-  const query = new URLSearchParams(location.search);
-  const raw = sessionStorage.getItem("peach-oauth");
-  if (!raw) throw new Error("Login session expired. Please sign in again.");
-  const saved = JSON.parse(raw);
-  if (!query.get("code") || query.get("state") !== saved.state)
-    throw new Error("Login verification failed.");
-  sessionStorage.removeItem("peach-oauth");
-  const response = await fetch(`https://${domain}/oauth2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: clientId,
-      code: query.get("code")!,
-      redirect_uri: location.origin + "/callback",
-      code_verifier: saved.verifier,
-    }),
-  });
-  if (!response.ok)
-    throw new Error("Could not complete sign-in. Please try again.");
-  const tokens = await response.json();
-  // Claims here are display-only. The API independently verifies signatures and claims.
-  const part = tokens.id_token
-    .split(".")[1]
-    .replaceAll("-", "+")
-    .replaceAll("_", "/");
-  const claims = JSON.parse(
-    new TextDecoder().decode(
-      Uint8Array.from(atob(part), (c) => c.charCodeAt(0)),
-    ),
-  );
-  if (
-    claims.nonce !== saved.nonce ||
-    claims.aud !== clientId ||
-    claims.token_use !== "id"
-  )
-    throw new Error("Login verification failed.");
-  publish({
-    token: tokens.id_token,
-    email: claims.email,
-    name: claims.name ?? claims.email.split("@")[0],
-    expires: claims.exp * 1000,
-  });
-  history.replaceState(null, "", "/callback");
+
+export function sessionFromUser(user: User | null | undefined): Session | null {
+  if (!user || user.expired || !user.profile || !user.id_token) return null;
+  const profile = user.profile;
+  const email = typeof profile.email === "string" ? profile.email : "";
+  if (!email) return null;
+
+  return {
+    token: user.id_token,
+    email,
+    name: typeof profile.name === "string" ? profile.name : email.split("@")[0],
+    expires: (user.expires_at ?? 0) * 1000,
+  };
 }

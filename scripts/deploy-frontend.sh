@@ -63,6 +63,7 @@ API_URL="${BACKEND_URL:-}"
 API_URL="${API_URL%/}"
 [[ -n "${API_URL}" ]] || die "BACKEND_URL is not set in .env - run make deploy-backend first"
 
+COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" --output text)}"
 COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='ClientId'].OutputValue" --output text)}"
 COGNITO_DOMAIN="${COGNITO_DOMAIN:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='Domain'].OutputValue" --output text)}"
 log "building against ${API_URL}"
@@ -108,6 +109,8 @@ SITE_URL="$(outputs SiteUrl)"
 if [[ "${FRONTEND_BUILD_DOCKER:-0}" == 1 ]]; then
   docker buildx build --target static-export --output "type=local,dest=${APP}/out" \
     --build-arg NEXT_OUTPUT=export --build-arg "NEXT_PUBLIC_API_URL=${API_URL}" \
+    --build-arg "NEXT_PUBLIC_COGNITO_REGION=${AWS_REGION}" \
+    --build-arg "NEXT_PUBLIC_COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}" \
     --build-arg "NEXT_PUBLIC_COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}" \
     --build-arg "NEXT_PUBLIC_COGNITO_DOMAIN=${COGNITO_DOMAIN}" "${APP}"
 else
@@ -115,8 +118,10 @@ else
   (cd "${APP}" && "${PM[@]}" install --frozen-lockfile)
   log "building the static export"
   (cd "${APP}" && NEXT_OUTPUT=export NEXT_PUBLIC_API_URL="${API_URL}" \
+    NEXT_PUBLIC_COGNITO_REGION="${AWS_REGION}" \
+    NEXT_PUBLIC_COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID}" \
     NEXT_PUBLIC_COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID}" \
-    NEXT_PUBLIC_COGNITO_DOMAIN="${COGNITO_DOMAIN}" "${PM[@]}" build)
+    NEXT_PUBLIC_COGNITO_DOMAIN="${COGNITO_DOMAIN}" "${PM[@]}" exec next build --webpack)
 fi
 [[ -f "${APP}/out/index.html" ]] || die "the export produced no out/index.html"
 

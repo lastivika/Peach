@@ -9,6 +9,16 @@ Parameters:
     Default: peach
   SiteUrl:
     Type: String
+  DomainPrefix:
+    Type: String
+    Description: Globally unique Cognito domain prefix.
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth Web application client ID.
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth Web application client secret. Never commit this value.
 Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
@@ -31,8 +41,22 @@ Resources:
       EnabledMfas: [SOFTWARE_TOKEN_MFA]
       AccountRecoverySetting:
         RecoveryMechanisms: [{Name: verified_email, Priority: 1}]
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: "openid email profile"
+      AttributeMapping:
+        email: email
+        email_verified: email_verified
   Client:
     Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleIdentityProvider
     Properties:
       UserPoolId: !Ref UserPool
       ClientName: !Sub '${ProjectName}-web'
@@ -40,8 +64,12 @@ Resources:
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows: [code]
       AllowedOAuthScopes: [openid, email, profile]
-      SupportedIdentityProviders: [COGNITO]
-      CallbackURLs: [!Sub '${SiteUrl}/callback', 'http://localhost:3000/callback']
+      SupportedIdentityProviders: [COGNITO, Google]
+      CallbackURLs:
+        - !Sub '${SiteUrl}/auth/callback/'
+        - 'http://localhost:3000/auth/callback/'
+        - !Sub '${SiteUrl}/callback'
+        - 'http://localhost:3000/callback'
       LogoutURLs: [!Sub '${SiteUrl}/', 'http://localhost:3000/']
       PreventUserExistenceErrors: ENABLED
       EnableTokenRevocation: true
@@ -54,7 +82,7 @@ Resources:
   Domain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Sub '${ProjectName}-${AWS::AccountId}-login'
+      Domain: !Ref DomainPrefix
       UserPoolId: !Ref UserPool
       ManagedLoginVersion: 2
   Branding:
@@ -70,3 +98,7 @@ Outputs:
     Value: !Ref Client
   Domain:
     Value: !Sub '${Domain}.auth.${AWS::Region}.amazoncognito.com'
+  GoogleAuthorizedJavascriptOrigin:
+    Value: !Sub 'https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com'
+  GoogleAuthorizedRedirectUri:
+    Value: !Sub 'https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com/oauth2/idpresponse'

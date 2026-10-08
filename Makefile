@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: cert-api deploy-lambda destroy-database help up down build logs ps migrate revision test test-backend test-frontend lint fmt clean shell-backend shell-db deploy-backend destroy-backend logs-backend migrate-backend cert domain deploy-frontend destroy-frontend github-role
+.PHONY: cert-api deploy-lambda deploy-cognito destroy-database help up down build logs ps migrate revision test test-backend test-frontend lint fmt clean shell-backend shell-db deploy-backend destroy-backend logs-backend migrate-backend cert domain deploy-frontend destroy-frontend github-role
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -77,6 +77,9 @@ cert-api: ## Request the regional ACM API certificate and print its validation C
 
 deploy-lambda: ## Legacy deployment retained for rollback; not the lab backend
 	./scripts/deploy-lambda.sh
+
+deploy-cognito: ## Deploy Cognito managed login with email/password and Google
+	./scripts/deploy-cognito.sh
 
 cert: ## Request + DNS-validate a us-east-1 certificate for the frontend: make cert DOMAIN=app.example.com
 	./scripts/domain-frontend.sh cert

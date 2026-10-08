@@ -12,16 +12,22 @@ step. Viewer HTTPS and HTTP-to-HTTPS redirects are provided by CloudFront.
 The API distribution disables caching and forwards authorization and query strings.
 
 Cognito hosted login uses authorization code + PKCE, state and nonce, with email
-verification. Tokens are stored only in sessionStorage; no refresh tokens are
-persisted. Sign in again when the one-hour token expires. The API validates JWT
-signature, issuer, audience, expiry, token use and verified email. Queries enforce
-ownership; another user's item returns 404. Existing legacy items are preserved
-with no owner and do not appear in a new user's board.
+verification. The browser stores the OIDC session in `sessionStorage` (not
+`localStorage`) and silently renews tokens while that tab remains open. Cognito
+rotates refresh tokens; closing the tab ends the browser session. The API
+validates JWT signature, issuer, audience, expiry, token use and verified email.
+Queries enforce ownership; another user's item returns 404. Existing legacy
+items are preserved with no owner and do not appear in a new user's board.
 
 ## Reproduce deployment
 
 1. `aws login --profile peach-lab`; put `AWS_PROFILE=peach-lab` in ignored `.env`.
-2. Bootstrap Cognito: deploy `infra/cognito.yaml` with ProjectName and SiteUrl.
+2. Bootstrap Cognito: configure the Google OAuth web client with the exact
+   origin and redirect URI printed by `make deploy-cognito`, then run
+   `make deploy-cognito` with `GOOGLE_OAUTH_CLIENT_ID` and
+   `GOOGLE_OAUTH_CLIENT_SECRET` set locally. The CloudFormation parameter is
+   `NoEcho`; do not commit the secret. The script preserves the existing pool
+   and email users while applying the Google provider/client configuration.
 3. Set `API_CORS_ORIGINS` to the frontend HTTPS origin.
 4. Commit backend changes, then `make deploy-backend`.
 5. `make deploy-frontend` (optionally `FRONTEND_BUILD_DOCKER=1` for Docker builds).

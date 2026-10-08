@@ -2,11 +2,12 @@
 
 import { LogOut } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { signOut, useSession } from "@/lib/auth";
+import { useAuthState } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -16,8 +17,9 @@ const links = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const router = useRouter();
-  const session = useSession();
+  const auth = useAuthState();
+  const [authError, setAuthError] = useState("");
+  const session = auth.session;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
@@ -57,7 +59,7 @@ export function SiteHeader() {
 
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
-          {session && (
+          {session ? (
             <>
               <span
                 aria-hidden
@@ -72,17 +74,35 @@ export function SiteHeader() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  signOut();
-                  router.replace("/");
+                  setAuthError("");
+                  void auth.signOut().catch((error: unknown) => {
+                    setAuthError(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not sign out.",
+                    );
+                  });
                 }}
               >
                 <LogOut data-icon="inline-start" className="size-4" />
-                Log out
+                Sign out
               </Button>
             </>
+          ) : (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/login/">Sign in</Link>
+            </Button>
           )}
         </div>
       </div>
+      {authError && (
+        <p
+          className="px-6 pb-2 text-right text-sm text-destructive"
+          role="alert"
+        >
+          {authError}
+        </p>
+      )}
     </header>
   );
 }

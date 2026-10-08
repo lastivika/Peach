@@ -54,9 +54,23 @@ describe("api", () => {
   });
 
   it("signs out when the API rejects the token", async () => {
+    vi.mocked(signOut).mockClear();
     mockFetch({ detail: "Token expired" }, { status: 401 });
     await expect(api.listItems()).rejects.toMatchObject({ status: 401 });
     expect(signOut).toHaveBeenCalled();
+  });
+
+  it("keeps the session when the API requires email verification", async () => {
+    vi.mocked(signOut).mockClear();
+    mockFetch(
+      { detail: "Verify your email address before accessing Peach" },
+      { status: 403 },
+    );
+    await expect(api.listItems()).rejects.toMatchObject({
+      status: 403,
+      message: "Verify your email address before accessing Peach",
+    });
+    expect(signOut).not.toHaveBeenCalled();
   });
 
   it("raises ApiError when the network is unreachable", async () => {
