@@ -52,11 +52,6 @@ async def current_user(
         )
         if claims["token_use"] != "id":
             raise ValueError("Invalid token use")
-        if claims.get("email_verified") is not True:
-            raise HTTPException(
-                403,
-                "Verify your email address before accessing Peach",
-            )
         sub, email = claims["sub"], claims["email"]
     except (jwt.PyJWTError, ValueError, KeyError, StopIteration) as exc:
         raise HTTPException(401, "Invalid or expired session") from exc
