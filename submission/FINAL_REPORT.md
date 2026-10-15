@@ -20,11 +20,15 @@ The permanent Scheduler and SQS event source mapping are currently disabled. The
 
 ## Test results
 
-On 2026-10-15, one manual SQS request created the `2026-W41` CSV and invoked delivery. One controlled scheduled request created the `2026-W42` CSV and invoked delivery. Both files were 288 bytes. The queue drained after each run. SES aggregate statistics showed two delivery attempts and no bounces/rejects/complaints in the corresponding 15-minute interval. Inbox delivery was not independently verified.
+The original controlled runs created the `2026-W41` and `2026-W42` CSV files (288 bytes each) and invoked delivery. SES aggregate statistics showed two delivery attempts and no bounces/rejects/complaints in the corresponding 15-minute interval; inbox delivery was not independently verified.
 
-An isolated test queue and Lambda produced three `AccessDenied` failures because the test role intentionally lacked `s3:ListBucket`; its message reached its own DLQ. SQS redrive completed and moved the message once. The post-redrive invocation evidence and cleanup still need verification because the AWS MCP session expired.
+On 2026-10-15, the marker-enabled ARM64 image was deployed to both Lambdas through a CloudFormation change set that changed only their image digests. One duplicate `2026-W41` SQS request logged `trigger=sqs origin=manual` and `already_exists`; the S3 object remained 288 bytes with its original timestamp. A temporary one-minute schedule emitted a real `source=schedule` message for the same existing week, which logged `trigger=schedule outcome=queued` and `already_exists`. The schedule and production event source mapping were restored to `DISABLED`.
 
-Local verification passed: 14 weekly-report handler tests, 2 isolated unit tests, compileall, Ruff, and `git diff --check`. DB-backed tests could not run because local PostgreSQL was unavailable. The production Lambda image has not been rebuilt with the new trigger markers.
+The delivery Lambda logged `trigger=s3 outcome=received` for a single synthetic EventBridge-shaped event referencing an absent `2026-W44` key. It then logged `trigger=s3 outcome=failed` because S3 denied `GetObject` for the missing key; no SES call was reached. This verified the deployed S3 marker without sending a duplicate email. The prior real S3-to-delivery path succeeded on the earlier image, but `accepted_by_ses` has not been reverified on the new image.
+
+An isolated queue test produced three expected `AccessDenied` failures, moved one message to its own DLQ, then completed an SQS redrive. The post-redrive test Lambda invocation ended without an error and both isolated queues were empty. The isolated Lambda, mapping, queues, role/policy, and log group have since been removed; the production DLQ was not read or modified.
+
+After setting both handler loggers to INFO, local verification passed: 16 weekly-report handler tests, Ruff, and `git diff --check`. No production database migration or report generation was run during this continuation.
 
 ## Error handling and duplicate behavior
 
@@ -32,23 +36,16 @@ The worker queue retries failed requests and sends messages to a DLQ after the c
 
 ## Current limitations
 
-- Deployed Lambdas remain on `sha256:91bcd93248a729df6eba596506bb5cf7927aac76d96cd38aa3f7195e55312c53`; local trigger logging changes are not deployed.
-- Production marker evidence `trigger=sqs`, `trigger=schedule`, and `trigger=s3` is therefore not available.
-- The isolated test Lambda, execution role, queues, event source mapping, and log group remain to be cleaned up.
-- SES is still in sandbox. Aggregate send statistics do not prove inbox delivery.
-- Source changes and the submission package were committed and pushed to `main`; the latest prior commit is [11be209](https://github.com/lastivika/Peach/commit/11be2093da7f461ed2072b3d7e4be4f13011efe4). The unrelated `frontend/.prettierignore` change remains uncommitted.
+- The deployed digest is `sha256:e050a7b5479dd8ebcfa33a8f3bb5db6a90388dc636935ea3b81d8f540c565fef`, tag `weekly-report-step7-markers-20261015T092619Z-local`; both functions are Active on ARM64 with their expected handler commands.
+- `trigger=sqs`, `trigger=schedule`, and `trigger=s3` receipt/failure markers are present in CloudWatch. A successful `trigger=s3 outcome=accepted_by_ses` log on the new image was not tested to avoid sending another email.
+- The permanent schedule remains disabled on its weekly cron and now carries `{"source":"schedule"}` as in the local template. CloudFormation's resource-drift probe reported `WeeklySchedule=DELETED`, while Scheduler `GetSchedule` confirms the schedule exists in `peach-weekly-reports` with the expected settings; that status discrepancy is unresolved.
+- SES remains in sandbox; aggregate statistics are not proof of inbox receipt.
+- The tested backend logging fix is pushed to `main` as [8b55cd3](https://github.com/lastivika/Peach/commit/8b55cd3). The unrelated `frontend/.prettierignore` change and this submission-document refresh remain local and uncommitted.
 
-On 2026-10-15, the requested continuation could not access AWS: `aws sts get-caller-identity --profile peach-lab` failed because the sign-in token endpoint was unreachable, AWS MCP returned `Unknown tool`, and `aws login` remained on the sign-in page's loading spinner. No AWS changes, Lambda invocations, ECR login/build/push, or test-resource cleanup were performed in that continuation. The isolated test resources listed below must be treated as still present until verified otherwise.
+## Temporary resource cleanup
 
-## Temporary resources requiring cleanup
-
-- Lambda: `peach-step7-worker-test-20261015`
-- Event source mapping UUID: `96421c8c-a49c-4e8b-a9ff-845e2ee37469`
-- SQS source: `peach-step7-worker-test-20261015-source`
-- SQS DLQ: `peach-step7-worker-test-20261015-dlq`
-- IAM role: `peach-step7-worker-test-20261015` (inline policy `temporary-test-runtime`)
-- CloudWatch log group: `/aws/lambda/peach-step7-worker-test-20261015`
+The Step 7-only Lambda, event source mapping, source/DLQ queues, inline policy and role, and log group were deleted after verifying the isolated queues were empty. The production Report DLQ was not read, changed, or redriven. The temporary Docker config holding ECR credentials was also removed.
 
 ## Conclusion
 
-The deployed worker → S3 → EventBridge → delivery path and one scheduled run were observed successfully. The lab is partially ready for submission: inbox receipt, trigger-marker logs, post-redrive recovery logs, test-resource cleanup, duplicate production behavior, new image deployment, and final GitHub push remain unverified or incomplete.
+The worker, duplicate-week skip, actual scheduled dispatch, trigger markers, retry/redrive, cleanup, and the earlier report delivery path have evidence. The lab is ready for submission with one documented limitation: delivery on the newly deployed image was exercised only up to the S3 read (the safe missing-key test), so a new SES acceptance marker and inbox receipt are not claimed.

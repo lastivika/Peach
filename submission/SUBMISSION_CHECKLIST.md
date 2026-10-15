@@ -1,12 +1,14 @@
 # Submission Checklist
 
-- [x] Push the lab code and submission package to `main`.
+- [x] Lab code and the prior submission package are present on `main`; the tested logging fix is pushed as https://github.com/lastivika/Peach/commit/8b55cd3.
 - [ ] Submit the repository: https://github.com/lastivika/Peach
-- [x] Latest prior commit: https://github.com/lastivika/Peach/commit/11be2093da7f461ed2072b3d7e4be4f13011efe4
-- [ ] Include `STEP7_ANSWERS.md`, `TEST_EVIDENCE.md`, `FINAL_REPORT.md`, `SCREENSHOTS_GUIDE.md`, and `ARCHITECTURE.md` from this folder.
-- [ ] Capture the genuine AWS Console screenshots listed in `SCREENSHOTS_GUIDE.md` after reconnecting AWS and cleaning up temporary resources.
+- [x] Latest pushed code commit before this documentation update: https://github.com/lastivika/Peach/commit/8b55cd3
+- [x] Include the current `STEP7_ANSWERS.md`, `TEST_EVIDENCE.md`, `FINAL_REPORT.md`, `SCREENSHOTS_GUIDE.md`, and `ARCHITECTURE.md` from this submission folder.
+- [ ] Capture the genuine AWS Console screenshots listed in `SCREENSHOTS_GUIDE.md`; AWS tests are complete and Step 7 temporary resources are cleaned up.
 - [ ] Do not claim inbox receipt; SES aggregate statistics show attempts, not inbox delivery.
-- [ ] Complete the remaining items in `STEP7_ANSWERS.md`: post-redrive log verification and cleanup, image build/deploy with the local trigger markers, and production duplicate-week verification.
+- [x] Verify post-redrive handling and clean up isolated test resources without touching the production DLQ.
+- [x] Build/deploy the immutable ARM64 image and verify `trigger=sqs` and `trigger=schedule` markers; `trigger=s3` was observed only as receipt followed by failure retrieving an absent S3 object. No successful `accepted_by_ses` event or inbox delivery on the new image is claimed.
+- [x] Verify production duplicate-week SQS behavior. Successful SES acceptance on the new image and inbox receipt are not claimed.
 - [ ] Preserve `frontend/.prettierignore`; it is an unrelated local change.
 
-**Manual action currently required:** Complete AWS sign-in for profile `peach-lab` (the CLI token endpoint was unreachable and the browser sign-in page did not finish loading), then verify and clean up the isolated test resources listed in `FINAL_REPORT.md`. After access is restored, verify post-redrive logs, build/publish/deploy the tested ARM64 images, capture the three trigger markers, and run the missing duplicate-week check. No AWS mutation or cleanup was performed during the latest continuation.
+**Manual action currently required:** Capture the genuine screenshots described in `SCREENSHOTS_GUIDE.md`. SES aggregate statistics do not establish inbox receipt. The new image's S3 delivery path was tested only with an absent object and did not reach SES.

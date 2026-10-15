@@ -8,7 +8,7 @@ Evidence below reflects the controlled runs on 2026-10-15 in `us-east-1`. “Obs
 
 **SES:** The SES `GetSendStatistics` datapoint for the 15-minute interval beginning 08:37 UTC reported 2 delivery attempts and 0 bounces/rejects/complaints. This is consistent with one manual and one scheduled report. It is aggregate evidence, not per-message or inbox confirmation.
 
-**Log marker:** The deployed worker image did not emit `trigger=sqs` / `trigger=schedule`, and the deployed delivery image did not emit `trigger=s3`. Those markers exist in the local source changes but were not deployed because ECR publication was blocked. The invocation and object timestamps corroborate the event path, but the marker requirement is **NOT VERIFIED**.
+**Log marker:** After deploying the corrected image, a duplicate `2026-W41` SQS request logged `trigger=sqs origin=manual outcome=received` and `outcome=already_exists`. The object remained unchanged. The temporary scheduled request logged `trigger=sqs origin=schedule` and `trigger=schedule outcome=queued`, then skipped the same existing object. Both trigger markers are verified in CloudWatch.
 
 ## B. Scheduled report
 
@@ -16,13 +16,13 @@ Evidence below reflects the controlled runs on 2026-10-15 in `us-east-1`. “Obs
 
 **Restoration:** The schedule was returned to `cron(0 7 ? * MON *)`, `Europe/Kyiv`, `DISABLED`, target input `{}`. The production event source mapping returned to `Disabled`. Both states were verified after the run.
 
-**Log marker:** The deployed worker did not log `trigger=schedule`; the log marker itself is **NOT VERIFIED**.
+**Log marker:** A temporary `rate(1 minute)` run on the existing schedule sent one Scheduler-origin message for `2026-W41`; CloudWatch logged `trigger=schedule outcome=queued` and the existing-object skip. The schedule was restored to its original disabled weekly cron and the SQS mapping was returned to Disabled.
 
 ## C. Failure, retries, DLQ, and redrive
 
 An isolated temporary test queue and DLQ were used; the existing production DLQ was not read or modified. A temporary ARM64 test Lambda used the currently deployed worker image and a narrowly scoped test role that initially lacked `s3:ListBucket`. One valid `2026-W41` message failed at the existing-object check with `AccessDenied` three times. The source queue was configured with `maxReceiveCount=3` and 30-second visibility; after the third failure its isolated DLQ showed 1 visible message.
 
-The test role then received `s3:ListBucket` for only the report bucket and exact `2026-W41` prefix. SQS `StartMessageMoveTask` returned `COMPLETED`, moving 1 message back to the isolated source queue. Subsequent queue metadata showed 0 visible/in-flight messages in both temporary queues. **The post-redrive Lambda log check and temporary-resource cleanup are not verified** because the AWS MCP session expired immediately afterward. Do not treat recovery or cleanup as complete until those are confirmed.
+The test role then received `s3:ListBucket` for only the report bucket and exact `2026-W41` prefix. SQS `StartMessageMoveTask` returned `COMPLETED`, moving 1 message back to the isolated source queue. CloudWatch shows a subsequent test Lambda START/END/REPORT with no error; source and DLQ metadata both showed 0 visible/in-flight messages. The isolated mapping, Lambda, queues, role/policy, and log group were then deleted. The production Report DLQ was not read or modified.
 
 The production Report DLQ showed 2 visible / 0 in-flight messages before the isolated experiment. No operation targeted that DLQ.
 
@@ -30,11 +30,11 @@ The production Report DLQ showed 2 visible / 0 in-flight messages before the iso
 
 **Automated evidence:** Local handler tests pass for worker idempotency (existing-key skip and conditional `IfNoneMatch="*"`) and for delivery behavior. The delivery test `test_repeated_s3_event_can_send_duplicate_email` confirms that replaying an S3 event can send another email because delivery has no deduplication store.
 
-**Production evidence:** A second production request for the same week was not sent. Therefore production duplicate counts are **NOT VERIFIED**. Based on the implementation, a repeated SQS request for an existing S3 key skips generation and does not create a second S3 Object Created event. A repeated EventBridge delivery for the same existing key can send a duplicate email.
+**Production evidence:** One duplicate `2026-W41` SQS message was processed after the logger fix and logged `outcome=already_exists`; the object's size, ETag, and LastModified remained unchanged, and no delivery invocation followed. A Scheduler-origin message for the same existing key also skipped. This confirms SQS-side idempotency. A repeated EventBridge delivery for an existing key can still send another email because delivery has no deduplication store.
+
+**S3 marker:** The deployed delivery Lambda received one EventBridge-shaped test event for an absent `2026-W44` key and logged `trigger=s3 outcome=received`, then `trigger=s3 outcome=failed` on S3 `GetObject` (`AccessDenied` for the missing key). This was deliberately chosen to avoid resending a report email. It verifies event parsing/logging, not successful SES delivery on the new image. Earlier W41/W42 delivery invocations succeeded on the previous image; SES aggregate statistics showed two attempts but do not prove inbox receipt.
 
 ## Remaining completion items
 
-1. Reconnect AWS MCP, verify the test Lambda logs after redrive, then remove the temporary mapping, Lambda, role, queues, and log group listed in `FINAL_REPORT.md`.
-2. Resolve a credential-safe ECR push path, publish the locally tested image, and deploy it through a reviewed CloudFormation change set. The local `trigger=*` logging changes are not in the deployed digest.
-3. Run one duplicate-week SQS test after cleanup; verify no new S3 object and no extra SES attempt.
-4. Verify mailbox receipt manually if the instructor requires proof of inbox delivery.
+1. Capture the genuine AWS Console screenshots listed in `SCREENSHOTS_GUIDE.md`.
+2. If the instructor requires a successful `accepted_by_ses` marker from the new image, authorize one additional delivery test knowing it can send a duplicate email; inbox receipt must still be verified in Gmail.
