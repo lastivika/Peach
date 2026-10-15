@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/home", label: "Home" },
   { href: "/items", label: "Board" },
+  { href: "/calendar", label: "Calendar" },
 ];
 
 export function SiteHeader() {

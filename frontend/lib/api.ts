@@ -96,11 +96,40 @@ export const itemInputSchema = z.object({
   status: itemStatusSchema,
 });
 
+export const meetingSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  start_at: z.string(),
+  end_at: z.string(),
+  location: z.string().nullable(),
+  purpose: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export const meetingListSchema = z.object({
+  meetings: z.array(meetingSchema),
+  total: z.number().int(),
+});
+export const meetingInputSchema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(200),
+    start_at: z.string(),
+    end_at: z.string(),
+    location: z.string().max(1000).nullable(),
+    purpose: z.string().max(5000).nullable(),
+  })
+  .refine((value) => new Date(value.end_at) > new Date(value.start_at), {
+    path: ["end_at"],
+    message: "End time must be later than start time",
+  });
+
 export type ItemStatus = z.infer<typeof itemStatusSchema>;
 export type Item = z.infer<typeof itemSchema>;
 export type ItemList = z.infer<typeof itemListSchema>;
 export type Health = z.infer<typeof healthSchema>;
 export type ItemInput = z.infer<typeof itemInputSchema>;
+export type Meeting = z.infer<typeof meetingSchema>;
+export type MeetingInput = z.infer<typeof meetingInputSchema>;
 
 /* --- endpoints --- */
 
@@ -129,4 +158,21 @@ export const api = {
 
   deleteItem: (id: string) =>
     request(`/api/v1/items/${id}`, z.undefined(), { method: "DELETE" }),
+
+  listMeetings: (start: string, end: string) => {
+    const params = new URLSearchParams({ start, end });
+    return request(`/api/v1/meetings?${params}`, meetingListSchema);
+  },
+  createMeeting: (payload: MeetingInput) =>
+    request("/api/v1/meetings", meetingSchema, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMeeting: (id: string, payload: MeetingInput) =>
+    request(`/api/v1/meetings/${id}`, meetingSchema, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteMeeting: (id: string) =>
+    request(`/api/v1/meetings/${id}`, z.undefined(), { method: "DELETE" }),
 };

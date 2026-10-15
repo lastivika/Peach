@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: cert-api deploy-lambda deploy-cognito destroy-database help up down build logs ps migrate revision test test-backend test-frontend lint fmt clean shell-backend shell-db deploy-backend destroy-backend logs-backend migrate-backend cert domain deploy-frontend destroy-frontend github-role
+.PHONY: cert-api deploy-lambda deploy-cognito destroy-database help up down build logs ps migrate revision test test-backend test-frontend lint fmt clean shell-backend shell-db deploy-backend destroy-backend logs-backend migrate-backend cert domain deploy-frontend destroy-frontend github-role report-now
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -95,3 +95,9 @@ destroy-frontend: ## Delete the frontend stack (bucket + distribution)
 
 github-role: ## Create the IAM role GitHub Actions assumes to deploy (OIDC, no keys)
 	./scripts/github-role.sh
+
+report-now: ## Queue one intentional weekly report (may send email): make report-now WEEK=2026-W39
+	@python3 -c 'import datetime, re, sys; w="$(WEEK)"; (sys.exit("WEEK must be a valid ISO week in YYYY-Www format") if not re.fullmatch(r"[0-9]{4}-W[0-9]{2}", w) else datetime.date.fromisocalendar(int(w[:4]), int(w[-2:]), 1))' 2>/dev/null || { echo 'Set WEEK to a valid ISO week, for example 2026-W39' >&2; exit 2; }
+	@queue_url=$$(aws cloudformation describe-stacks --stack-name "$${REPORT_STACK:-peach-weekly-meetings-report}" --query "Stacks[0].Outputs[?OutputKey=='ReportQueueUrl'].OutputValue | [0]" --output text --region "$${AWS_REGION:-us-east-1}" --profile "$${AWS_PROFILE:-peach-lab}"); \
+	  test -n "$$queue_url" && test "$$queue_url" != None || { echo 'Report stack or ReportQueueUrl output not found' >&2; exit 1; }; \
+	  aws sqs send-message --queue-url "$$queue_url" --message-body '{"week":"$(WEEK)"}' --region "$${AWS_REGION:-us-east-1}" --profile "$${AWS_PROFILE:-peach-lab}" --query MessageId --output text

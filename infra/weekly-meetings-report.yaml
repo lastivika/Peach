@@ -1,0 +1,451 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Optional weekly Peach meeting report pipeline. Reuses the existing meetings
+  database and stores private CSV reports in S3. Schedule is disabled by default.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: peach
+  ImageUri:
+    Type: String
+    Description: Existing Peach Lambda-compatible backend container image in ECR.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Existing VPC subnets that can reach Aurora PostgreSQL; Lambda ENIs do not receive public IP addresses.
+  PrivateRouteTableIds:
+    Type: CommaDelimitedList
+    Description: Route tables used by PrivateSubnetIds; attaching S3 adds routes for every subnet using each selected table.
+  S3PrefixListId:
+    Type: String
+    Description: AWS-managed S3 prefix list ID for this stack's selected Region.
+  AttachS3GatewayEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Set false only when these route tables already use an S3 gateway endpoint.
+  DatabaseSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing database security group; this stack adds ingress from the report Lambda only.
+  DatabaseUrlSecretArn:
+    Type: String
+    Description: Existing Secrets Manager secret whose SecretString is the SQLAlchemy asyncpg URL.
+  ReportSenderEmail:
+    Type: String
+    Description: Verified SES sender identity in this selected Region.
+  ReportRecipientEmail:
+    Type: String
+    Description: Authorized recipient for organization-wide organizer statistics and meeting titles.
+  ScheduleState:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+    Description: Enable only after SES identities and the recipient's report authorization are confirmed.
+
+Conditions:
+  CreateS3GatewayEndpoint: !Equals [!Ref AttachS3GatewayEndpoint, "true"]
+
+Resources:
+  ReportBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores private weekly CSV reports for the report delivery workflow.
+        must:
+          - Keep public access blocked and server-side encryption enabled.
+          - Expire report objects after 90 days.
+          - Review stored report data before any replacement or deletion.
+    Properties:
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-weekly-reports
+            Status: Enabled
+            Prefix: reports/
+            ExpirationInDays: 90
+      NotificationConfiguration:
+        EventBridgeConfiguration: {EventBridgeEnabled: true}
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  ReportQueueDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  ReportQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 720
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ReportQueueDlq.Arn
+        maxReceiveCount: 3
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  SchedulerDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  DeliveryDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  DeliveryDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref DeliveryDlq]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: events.amazonaws.com}
+            Action: [sqs:SendMessage]
+            Resource: !GetAtt DeliveryDlq.Arn
+            Condition:
+              ArnEquals: {aws:SourceArn: !GetAtt ReportCreatedRule.Arn}
+
+  ReportFunctionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Weekly report Lambda access to the existing Peach database.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          DestinationSecurityGroupId: !Ref DatabaseSecurityGroupId
+          Description: PostgreSQL to the existing Peach database.
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          DestinationPrefixListId: !Ref S3PrefixListId
+          Description: HTTPS to the S3 gateway endpoint route.
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  DatabaseIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref ReportFunctionSecurityGroup
+      Description: PostgreSQL from Peach weekly report Lambda.
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateS3GatewayEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Gives the VPC report Lambda private access to S3 without NAT.
+        must:
+          - Scope report object access to the report bucket prefix.
+          - Keep ECR's regional image-layer bucket readable so existing ECS tasks can pull images when their shared route table uses this endpoint.
+    Properties:
+      VpcEndpointType: Gateway
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      RouteTableIds: !Ref PrivateRouteTableIds
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: [s3:GetObject, s3:PutObject]
+            Resource: !Sub "${ReportBucket.Arn}/reports/*"
+          - Effect: Allow
+            Principal: "*"
+            Action: [s3:ListBucket]
+            Resource: !GetAtt ReportBucket.Arn
+            Condition:
+              StringLike:
+                s3:prefix: reports/*
+          - Effect: Allow
+            Principal: "*"
+            Action: [s3:GetObject]
+            Resource: !Sub "arn:${AWS::Partition}:s3:::prod-${AWS::Region}-starport-layer-bucket/*"
+
+  ReportFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: write-report-objects
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "${ReportBucket.Arn}/reports/*"
+              - Effect: Allow
+                Action: [s3:ListBucket]
+                Resource: !GetAtt ReportBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix: reports/*
+        - PolicyName: consume-report-queue
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes]
+                Resource: !GetAtt ReportQueue.Arn
+        - PolicyName: write-report-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-weekly-report-worker:*"
+
+  ReportFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-weekly-report-worker"
+      RetentionInDays: 7
+
+  ReportFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: DatabaseIngress
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Generates one deterministic weekly CSV per SQS report message.
+        must:
+          - Do not reserve account-wide Lambda concurrency for this optional lab worker.
+          - Keep the SQS event source concurrency capped and S3 writes conditional.
+    Properties:
+      FunctionName: !Sub "${ProjectName}-weekly-report-worker"
+      PackageType: Image
+      Code: {ImageUri: !Ref ImageUri}
+      ImageConfig: {Command: [app.weekly_report.worker.handler]}
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 120
+      Role: !GetAtt ReportFunctionRole.Arn
+      VpcConfig:
+        SubnetIds: !Ref PrivateSubnetIds
+        SecurityGroupIds: [!Ref ReportFunctionSecurityGroup]
+      Environment:
+        Variables:
+          DATABASE_URL: !Sub "{{resolve:secretsmanager:${DatabaseUrlSecretArn}:SecretString}}"
+          DB_POOLING: "false"
+          APP_ENV: production
+          REPORT_BUCKET: !Ref ReportBucket
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  ReportQueueMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Bounds report queue scaling without reserving account-wide Lambda concurrency.
+        must:
+          - Keep SQS batch size one and maximum concurrency two.
+          - Keep conditional S3 object creation so duplicate deliveries cannot overwrite a report.
+    Properties:
+      EventSourceArn: !GetAtt ReportQueue.Arn
+      FunctionName: !Ref ReportFunction
+      Enabled: false
+      BatchSize: 1
+      FunctionResponseTypes: [ReportBatchItemFailures]
+      ScalingConfig:
+        MaximumConcurrency: 2
+
+  DeliveryFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-report-and-send-email
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub "${ReportBucket.Arn}/reports/*"
+              - Effect: Allow
+                Action: [ses:SendEmail, ses:SendRawEmail]
+                Resource: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${ReportSenderEmail}"
+        - PolicyName: write-delivery-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-weekly-report-delivery:*"
+        - PolicyName: route-delivery-failures-to-dlq
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [sqs:SendMessage]
+                Resource: !GetAtt DeliveryDlq.Arn
+
+  DeliveryFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-weekly-report-delivery"
+      RetentionInDays: 7
+
+  DeliveryFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-weekly-report-delivery"
+      PackageType: Image
+      Code: {ImageUri: !Ref ImageUri}
+      ImageConfig: {Command: [app.weekly_report.delivery.handler]}
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt DeliveryFunctionRole.Arn
+      Environment:
+        Variables:
+          REPORT_BUCKET: !Ref ReportBucket
+          REPORT_SENDER: !Ref ReportSenderEmail
+          REPORT_RECIPIENT: !Ref ReportRecipientEmail
+      Tags: [{Key: PROJECT_NAME, Value: !Ref ProjectName}]
+
+  DeliveryPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DeliveryFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ReportCreatedRule.Arn
+
+  ReportCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Send a weekly CSV attachment and private link when a report is written.
+      EventPattern:
+        source: [aws.s3]
+        detail-type: [Object Created]
+        detail:
+          bucket:
+            name: [!Ref ReportBucket]
+          object:
+            key:
+              - prefix: reports/
+      Targets:
+        - Id: ReportEmailDelivery
+          Arn: !GetAtt DeliveryFunction.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt DeliveryDlq.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 3600
+            MaximumRetryAttempts: 5
+
+  DeliveryAsyncFailureConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref DeliveryFunction
+      Qualifier: "$LATEST"
+      MaximumEventAgeInSeconds: 3600
+      MaximumRetryAttempts: 2
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt DeliveryDlq.Arn
+
+  SchedulerGroup:
+    Type: AWS::Scheduler::ScheduleGroup
+    Properties:
+      Name: !Sub "${ProjectName}-weekly-reports"
+
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Lets only the named EventBridge Scheduler group assume this SQS delivery role.
+        must:
+          - Keep the scheduler.amazonaws.com principal and sts:AssumeRole action.
+          - Scope aws:SourceArn to SchedulerGroup.Arn and aws:SourceAccount to this stack account.
+          - Grant only sqs:SendMessage to the report queue and Scheduler DLQ.
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: scheduler.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref AWS::AccountId}
+              ArnLike: {aws:SourceArn: !GetAtt SchedulerGroup.Arn}
+      Policies:
+        - PolicyName: enqueue-report-and-capture-failures
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [sqs:SendMessage]
+                Resource: [!GetAtt ReportQueue.Arn, !GetAtt SchedulerDlq.Arn]
+
+  WeeklySchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${ProjectName}-weekly-meetings"
+      GroupName: !Ref SchedulerGroup
+      Description: Queue a report for the previous complete ISO week at 07:00 Europe/Kyiv every Monday.
+      State: !Ref ScheduleState
+      ScheduleExpression: "cron(0 7 ? * MON *)"
+      ScheduleExpressionTimezone: Europe/Kyiv
+      FlexibleTimeWindow: {Mode: "OFF"}
+      Target:
+        Arn: !GetAtt ReportQueue.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: "{}"
+        DeadLetterConfig:
+          Arn: !GetAtt SchedulerDlq.Arn
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 5
+
+Outputs:
+  ReportBucketName:
+    Value: !Ref ReportBucket
+  ReportQueueUrl:
+    Value: !Ref ReportQueue
+  ReportQueueDlqUrl:
+    Value: !Ref ReportQueueDlq
+  ScheduleArn:
+    Value: !Sub "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/${SchedulerGroup}/${ProjectName}-weekly-meetings"

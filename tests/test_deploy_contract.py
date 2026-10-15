@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SHA = "a" * 40
+REPORT_TEMPLATE = (ROOT / "infra/weekly-meetings-report.yaml").read_text()
 FAKE_TOOL = r'''#!/usr/bin/env python3
 import json, os, pathlib, sys
 args = sys.argv[1:]
@@ -45,6 +46,20 @@ elif cmd.startswith('ecs describe-services'):
 
 
 class DeployContract(unittest.TestCase):
+    def test_weekly_report_schedule_is_disabled_and_sends_directly_to_sqs(self):
+        self.assertIn("Default: DISABLED", REPORT_TEMPLATE)
+        self.assertNotIn("ReservedConcurrentExecutions:", REPORT_TEMPLATE)
+        self.assertIn("MaximumConcurrency: 2", REPORT_TEMPLATE)
+        self.assertIn('ScheduleExpression: "cron(0 7 ? * MON *)"', REPORT_TEMPLATE)
+        self.assertIn("ScheduleExpressionTimezone: Europe/Kyiv", REPORT_TEMPLATE)
+        self.assertIn('FlexibleTimeWindow: {Mode: "OFF"}', REPORT_TEMPLATE)
+        self.assertRegex(
+            REPORT_TEMPLATE,
+            r"WeeklySchedule:[\s\S]*?Target:[\s\S]*?Arn: !GetAtt ReportQueue\.Arn",
+        )
+        self.assertNotIn("DispatcherFunction", REPORT_TEMPLATE)
+        self.assertIn('Input: "{}"', REPORT_TEMPLATE)
+
     def run_deploy(self, scenario):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

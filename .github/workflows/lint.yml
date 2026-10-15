@@ -20,7 +20,9 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install cfn-lint==1.57.1
-      - run: cfn-lint infra/ecs-backend.yaml infra/github-oidc.yaml infra/frontend.yaml infra/cognito.yaml
+      - run: >-
+          cfn-lint infra/ecs-backend.yaml infra/weekly-meetings-report.yaml
+          infra/github-oidc.yaml infra/frontend.yaml infra/cognito.yaml
       - run: bash -n scripts/*.sh
       - run: python -m unittest discover -s tests -v
 
