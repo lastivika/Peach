@@ -28,3 +28,6 @@ out/
 
 # --- docker ---
 pgdata/
+
+# --- submission artifacts (kept locally) ---
+submission/
