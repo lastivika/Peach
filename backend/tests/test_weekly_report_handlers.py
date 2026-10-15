@@ -88,6 +88,7 @@ def test_delivery_reads_csv_and_sends_attachment_and_private_link(monkeypatch):
 
 def test_delivery_accepts_native_s3_eventbridge_event(monkeypatch, caplog):
     caplog.set_level("INFO")
+
     class S3:
         def get_object(self, *, Bucket, Key):
             assert Bucket == "weekly-report"
@@ -389,6 +390,7 @@ def test_worker_message_can_be_replayed_after_three_failures_are_fixed(monkeypat
 
 def test_worker_logs_scheduled_origin(monkeypatch, caplog):
     caplog.set_level("INFO")
+
     class S3:
         def list_objects_v2(self, **_kwargs):
             return {"Contents": [{"Key": "reports/2026-W41/weekly-meetings.csv"}]}

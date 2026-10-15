@@ -35,7 +35,7 @@ def handler(event, context):
     for record in event.get("Records", []):
         try:
             payload = json.loads(record["body"])
-        except (KeyError, json.JSONDecodeError):
+        except KeyError, json.JSONDecodeError:
             _LOG.error("trigger=sqs origin=unknown outcome=invalid_message")
             raise
         if not isinstance(payload, dict):
@@ -72,9 +72,7 @@ def handler(event, context):
         except ClientError as error:
             status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
             if status == 412 and _already_reported(bucket, key):
-                _LOG.info(
-                    "trigger=sqs origin=%s outcome=already_exists week=%s", origin, week
-                )
+                _LOG.info("trigger=sqs origin=%s outcome=already_exists week=%s", origin, week)
                 continue
             _LOG.error("trigger=sqs origin=%s outcome=failed week=%s", origin, week)
             raise

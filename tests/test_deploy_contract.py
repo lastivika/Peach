@@ -58,7 +58,7 @@ class DeployContract(unittest.TestCase):
             r"WeeklySchedule:[\s\S]*?Target:[\s\S]*?Arn: !GetAtt ReportQueue\.Arn",
         )
         self.assertNotIn("DispatcherFunction", REPORT_TEMPLATE)
-        self.assertIn('Input: "{}"', REPORT_TEMPLATE)
+        self.assertIn('Input: \'{"source":"schedule"}\'', REPORT_TEMPLATE)
 
     def run_deploy(self, scenario):
         with tempfile.TemporaryDirectory() as directory:

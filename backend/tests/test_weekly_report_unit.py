@@ -45,9 +45,9 @@ async def test_report_queries_iso_week_and_previous_week_and_writes_csv():
 
     sql = [str(statement.compile(dialect=postgresql.dialect())) for statement in session.statements]
     assert len(sql) == 2
-    assert all('FROM meetings' in statement for statement in sql)
-    assert all('meetings.start_at >=' in statement for statement in sql)
-    assert all('meetings.start_at <' in statement for statement in sql)
+    assert all("FROM meetings" in statement for statement in sql)
+    assert all("meetings.start_at >=" in statement for statement in sql)
+    assert all("meetings.start_at <" in statement for statement in sql)
     assert all(
         "ORDER BY meetings.owner_id, meetings.start_at, meetings.id" in statement
         for statement in sql
