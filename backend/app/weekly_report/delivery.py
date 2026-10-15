@@ -10,6 +10,7 @@ from functools import lru_cache
 from urllib.parse import unquote_plus
 
 _LOG = logging.getLogger(__name__)
+_LOG.setLevel(logging.INFO)
 
 
 @lru_cache

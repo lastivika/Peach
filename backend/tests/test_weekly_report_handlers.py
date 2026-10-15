@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import types
 from datetime import datetime
@@ -15,6 +16,14 @@ from app.weekly_report import delivery, worker
 def test_last_completed_week_handles_iso_year_boundary_in_kyiv():
     monday = datetime(2021, 1, 4, 0, 5, tzinfo=ZoneInfo("Europe/Kyiv"))
     assert previous_completed_week(monday) == "2020-W53"
+
+
+def test_worker_marker_logger_is_enabled_for_lambda_runtime():
+    assert worker._LOG.isEnabledFor(logging.INFO)
+
+
+def test_delivery_marker_logger_is_enabled_for_lambda_runtime():
+    assert delivery._LOG.isEnabledFor(logging.INFO)
 
 
 def test_delivery_reads_csv_and_sends_attachment_and_private_link(monkeypatch):

@@ -11,6 +11,7 @@ from app.services.weekly_report import build_weekly_report, previous_completed_w
 
 _WEEK = re.compile(r"^\d{4}-W\d{2}$")
 _LOG = logging.getLogger(__name__)
+_LOG.setLevel(logging.INFO)
 
 
 @lru_cache
