@@ -36,7 +36,9 @@ The worker queue retries failed requests and sends messages to a DLQ after the c
 - Production marker evidence `trigger=sqs`, `trigger=schedule`, and `trigger=s3` is therefore not available.
 - The isolated test Lambda, execution role, queues, event source mapping, and log group remain to be cleaned up.
 - SES is still in sandbox. Aggregate send statistics do not prove inbox delivery.
-- Source changes and this submission package were committed and pushed to `main` as [151026e](https://github.com/lastivika/Peach/commit/151026eb2e29b441d48de88580cf4ebb7496b390). The unrelated `frontend/.prettierignore` change remains uncommitted.
+- Source changes and the submission package were committed and pushed to `main`; the latest prior commit is [11be209](https://github.com/lastivika/Peach/commit/11be2093da7f461ed2072b3d7e4be4f13011efe4). The unrelated `frontend/.prettierignore` change remains uncommitted.
+
+On 2026-10-15, the requested continuation could not access AWS: `aws sts get-caller-identity --profile peach-lab` failed because the sign-in token endpoint was unreachable, AWS MCP returned `Unknown tool`, and `aws login` remained on the sign-in page's loading spinner. No AWS changes, Lambda invocations, ECR login/build/push, or test-resource cleanup were performed in that continuation. The isolated test resources listed below must be treated as still present until verified otherwise.
 
 ## Temporary resources requiring cleanup
 
