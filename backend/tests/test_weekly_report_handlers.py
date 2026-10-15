@@ -77,7 +77,8 @@ def test_delivery_reads_csv_and_sends_attachment_and_private_link(monkeypatch):
     assert attachments[0].get_content() == "meeting_count,title\n1,Planning\n"
 
 
-def test_delivery_accepts_native_s3_eventbridge_event(monkeypatch):
+def test_delivery_accepts_native_s3_eventbridge_event(monkeypatch, caplog):
+    caplog.set_level("INFO")
     class S3:
         def get_object(self, *, Bucket, Key):
             assert Bucket == "weekly-report"
@@ -117,6 +118,8 @@ def test_delivery_accepts_native_s3_eventbridge_event(monkeypatch):
     }
     assert delivery.handler(event, None) == {"processed": 1}
     assert ses.sent["Destination"] == {"ToAddresses": ["authorized@example.test"]}
+    assert "trigger=s3 outcome=received week=2026-W43" in caplog.text
+    assert "trigger=s3 outcome=accepted_by_ses week=2026-W43" in caplog.text
 
 
 def test_delivery_accepts_sqs_records_wrapping_eventbridge_event(monkeypatch):
@@ -373,3 +376,26 @@ def test_worker_message_can_be_replayed_after_three_failures_are_fixed(monkeypat
     assert s3.objects[("weekly-report", "reports/2026-W41/weekly-meetings.csv")] == (
         b"meeting_count\n0\n"
     )
+
+
+def test_worker_logs_scheduled_origin(monkeypatch, caplog):
+    caplog.set_level("INFO")
+    class S3:
+        def list_objects_v2(self, **_kwargs):
+            return {"Contents": [{"Key": "reports/2026-W41/weekly-meetings.csv"}]}
+
+    monkeypatch.setenv("REPORT_BUCKET", "weekly-report")
+    monkeypatch.setattr(worker, "_s3_client", lambda: S3())
+
+    assert worker.handler(
+        {"Records": [{"body": '{"week":"2026-W41","source":"schedule"}'}]}, None
+    ) == {"processed": 1}
+    assert "trigger=sqs origin=schedule outcome=received" in caplog.text
+    assert "trigger=schedule outcome=queued" in caplog.text
+
+
+@pytest.mark.parametrize("body", ["[]", "null", '"text"'])
+def test_worker_rejects_non_object_message_body(monkeypatch, body):
+    monkeypatch.setenv("REPORT_BUCKET", "weekly-report")
+    with pytest.raises(ValueError, match="JSON object"):
+        worker.handler({"Records": [{"body": body}]}, None)

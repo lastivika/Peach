@@ -433,7 +433,7 @@ Resources:
       Target:
         Arn: !GetAtt ReportQueue.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: "{}"
+        Input: '{"source":"schedule"}'
         DeadLetterConfig:
           Arn: !GetAtt SchedulerDlq.Arn
         RetryPolicy:

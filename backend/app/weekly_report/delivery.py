@@ -1,12 +1,15 @@
 """Email a report attachment and time-limited private link after S3 creation."""
 
 import json
+import logging
 import os
 import re
 from email.message import EmailMessage
 from email.policy import SMTP
 from functools import lru_cache
 from urllib.parse import unquote_plus
+
+_LOG = logging.getLogger(__name__)
 
 
 @lru_cache
@@ -79,31 +82,37 @@ def handler(event, context):
             date.fromisocalendar(year, week_number, 1)
         except ValueError:
             continue
-        report = _s3_client().get_object(Bucket=bucket, Key=key)["Body"].read()
-        url = _s3_client().generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket, "Key": key},
-            ExpiresIn=604800,
-        )
-        message = EmailMessage()
-        message["Subject"] = f"Peach weekly meetings report: {week}"
-        message["From"] = sender
-        message["To"] = recipient
-        message.set_content(
-            f"The Peach meetings report for {week} is attached. "
-            "The private download link is intended to work for up to 7 days, "
-            "but may expire sooner when the signing credentials expire:\n"
-            f"{url}"
-        )
-        message.add_attachment(
-            report,
-            maintype="text",
-            subtype="csv",
-            filename=f"weekly-meetings-{week}.csv",
-        )
-        _ses_client().send_email(
-            FromEmailAddress=sender,
-            Destination={"ToAddresses": [recipient]},
-            Content={"Raw": {"Data": message.as_bytes(policy=SMTP)}},
-        )
+        _LOG.info("trigger=s3 outcome=received week=%s", week)
+        try:
+            report = _s3_client().get_object(Bucket=bucket, Key=key)["Body"].read()
+            url = _s3_client().generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=604800,
+            )
+            message = EmailMessage()
+            message["Subject"] = f"Peach weekly meetings report: {week}"
+            message["From"] = sender
+            message["To"] = recipient
+            message.set_content(
+                f"The Peach meetings report for {week} is attached. "
+                "The private download link is intended to work for up to 7 days, "
+                "but may expire sooner when the signing credentials expire:\n"
+                f"{url}"
+            )
+            message.add_attachment(
+                report,
+                maintype="text",
+                subtype="csv",
+                filename=f"weekly-meetings-{week}.csv",
+            )
+            _ses_client().send_email(
+                FromEmailAddress=sender,
+                Destination={"ToAddresses": [recipient]},
+                Content={"Raw": {"Data": message.as_bytes(policy=SMTP)}},
+            )
+        except Exception:
+            _LOG.exception("trigger=s3 outcome=failed week=%s", week)
+            raise
+        _LOG.info("trigger=s3 outcome=accepted_by_ses week=%s", week)
     return {"processed": len(records)}
