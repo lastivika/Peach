@@ -36,7 +36,7 @@ The worker queue retries failed requests and sends messages to a DLQ after the c
 - Production marker evidence `trigger=sqs`, `trigger=schedule`, and `trigger=s3` is therefore not available.
 - The isolated test Lambda, execution role, queues, event source mapping, and log group remain to be cleaned up.
 - SES is still in sandbox. Aggregate send statistics do not prove inbox delivery.
-- No final Git commit/push has been completed for this turn.
+- Source changes and this submission package were committed and pushed to `main` as [151026e](https://github.com/lastivika/Peach/commit/151026eb2e29b441d48de88580cf4ebb7496b390). The unrelated `frontend/.prettierignore` change remains uncommitted.
 
 ## Temporary resources requiring cleanup
 

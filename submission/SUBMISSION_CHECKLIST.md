@@ -1,8 +1,8 @@
 # Submission Checklist
 
-- [ ] Push the final lab code and submission package to `main`.
+- [x] Push the lab code and submission package to `main`.
 - [ ] Submit the repository: https://github.com/lastivika/Peach
-- [ ] Add the final commit URL after the push is complete.
+- [x] Final commit: https://github.com/lastivika/Peach/commit/151026eb2e29b441d48de88580cf4ebb7496b390
 - [ ] Include `STEP7_ANSWERS.md`, `TEST_EVIDENCE.md`, `FINAL_REPORT.md`, `SCREENSHOTS_GUIDE.md`, and `ARCHITECTURE.md` from this folder.
 - [ ] Capture the genuine AWS Console screenshots listed in `SCREENSHOTS_GUIDE.md` after reconnecting AWS and cleaning up temporary resources.
 - [ ] Do not claim inbox receipt; SES aggregate statistics show attempts, not inbox delivery.
