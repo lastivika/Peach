@@ -1,0 +1,16 @@
+let functions = Resources.*[ Type == 'AWS::Lambda::Function' ]
+rule parser_is_isolated_and_bounded {
+    %functions.Properties.VpcConfig !exists
+    %functions.Properties.Timeout <= 30
+    %functions.Properties.MemorySize == 512
+}
+let urls = Resources.*[ Type == 'AWS::Lambda::Url' ]
+rule parser_cors_is_not_wildcard {
+    %urls.Properties.Cors.AllowOrigins[*].Ref == 'SiteOrigin'
+    Parameters.SiteOrigin.AllowedPattern == 'https://[^/]+'
+    %urls.Properties.Cors.AllowMethods == ['POST']
+}
+let logs = Resources.*[ Type == 'AWS::Logs::LogGroup' ]
+rule logs_have_retention {
+    %logs.Properties.RetentionInDays <= 14
+}

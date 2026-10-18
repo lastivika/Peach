@@ -66,6 +66,12 @@ API_URL="${API_URL%/}"
 COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" --output text)}"
 COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='ClientId'].OutputValue" --output text)}"
 COGNITO_DOMAIN="${COGNITO_DOMAIN:-$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-cognito" --query "Stacks[0].Outputs[?OutputKey=='Domain'].OutputValue" --output text)}"
+# Preserve the optional parser in CI builds where local .env is absent.
+if [[ -z "${NEXT_PUBLIC_AGENDA_PARSER_URL:-}" ]]; then
+  NEXT_PUBLIC_AGENDA_PARSER_URL="$(aws cloudformation describe-stacks --stack-name "${PROJECT_NAME}-ai" --query "Stacks[0].Outputs[?OutputKey=='ParserUrl'].OutputValue" --output text 2>/dev/null || true)"
+  [[ "${NEXT_PUBLIC_AGENDA_PARSER_URL}" != None ]] || NEXT_PUBLIC_AGENDA_PARSER_URL=""
+fi
+export NEXT_PUBLIC_AGENDA_PARSER_URL
 log "building against ${API_URL}"
 
 # The public API must use HTTPS; browsers block mixed content.
@@ -108,6 +114,7 @@ SITE_URL="$(outputs SiteUrl)"
 
 if [[ "${FRONTEND_BUILD_DOCKER:-0}" == 1 ]]; then
   docker buildx build --target static-export --output "type=local,dest=${APP}/out" \
+    --build-arg "NEXT_PUBLIC_AGENDA_PARSER_URL=${NEXT_PUBLIC_AGENDA_PARSER_URL:-}" \
     --build-arg NEXT_OUTPUT=export --build-arg "NEXT_PUBLIC_API_URL=${API_URL}" \
     --build-arg "NEXT_PUBLIC_COGNITO_REGION=${AWS_REGION}" \
     --build-arg "NEXT_PUBLIC_COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}" \

@@ -24,6 +24,8 @@ CMD ["pnpm", "dev"]
 FROM base AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* is inlined at build time, so it has to be present here too.
+ARG NEXT_PUBLIC_AGENDA_PARSER_URL=
+ENV NEXT_PUBLIC_AGENDA_PARSER_URL=$NEXT_PUBLIC_AGENDA_PARSER_URL
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Compiled into the bundle, like the API URL. Written by make deploy-cognito.

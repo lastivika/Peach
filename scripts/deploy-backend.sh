@@ -45,8 +45,16 @@ AWS_VPC_ID="${AWS_VPC_ID:-$(aws ec2 describe-security-groups --group-ids "${DATA
 AWS_SUBNET_IDS="${AWS_SUBNET_IDS:-$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${AWS_VPC_ID}" Name=default-for-az,Values=true --query 'Subnets[].SubnetId' --output text | tr '\t' ',')}"
 [[ "${AWS_SUBNET_IDS}" == *,* ]] || die "Set public subnets in at least two availability zones"
 
-IMAGE_TAG="${IMAGE_TAG:-${GITHUB_SHA:-$(git -C "${ROOT}" rev-parse HEAD)}}"
-[[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]] || die "IMAGE_TAG must be a full Git commit SHA, never latest"
+BUILD_CONTEXT="${ROOT}/backend"
+if [[ "${LOCAL_RELEASE:-0}" == 1 ]]; then
+  SNAPSHOT="$(python3 "${ROOT}/scripts/backend-snapshot.py")"
+  BUILD_CONTEXT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["directory"])' <<< "${SNAPSHOT}")"
+  IMAGE_TAG="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["tag"])' <<< "${SNAPSHOT}")"
+  echo "Deploying source snapshot ${IMAGE_TAG} (no Git commit)"
+else
+  IMAGE_TAG="${IMAGE_TAG:-${GITHUB_SHA:-$(git -C "${ROOT}" rev-parse HEAD)}}"
+  [[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]] || die "IMAGE_TAG must be a full Git commit SHA, never latest"
+fi
 REGISTRY="${ACCOUNT}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
 IMAGE_URI="${REGISTRY}/${REPOSITORY}:${IMAGE_TAG}"
 if ! aws ecr describe-repositories --repository-names "${REPOSITORY}" >/dev/null 2>&1; then
@@ -55,12 +63,14 @@ if ! aws ecr describe-repositories --repository-names "${REPOSITORY}" >/dev/null
     --tags "Key=PROJECT_NAME,Value=${PROJECT_NAME}" >/dev/null
 fi
 if ! aws ecr describe-images --repository-name "${REPOSITORY}" --image-ids "imageTag=${IMAGE_TAG}" >/dev/null 2>&1; then
+  if [[ "${LOCAL_RELEASE:-0}" != 1 ]]; then
   [[ "${IMAGE_TAG}" == "$(git -C "${ROOT}" rev-parse HEAD)" ]] || die "For rollback the previous SHA must already exist in ECR"
   git -C "${ROOT}" diff --quiet HEAD -- backend || die "Commit backend changes before deploying a SHA-tagged image"
   [[ -z "$(git -C "${ROOT}" ls-files --others --exclude-standard backend)" ]] || die "Commit untracked backend files before deploying"
+  fi
   aws ecr get-login-password | docker login --username AWS --password-stdin "${REGISTRY}" >/dev/null
   docker buildx build --platform linux/arm64 --target runtime --provenance=false --sbom=false \
-    --tag "${IMAGE_URI}" --push "${ROOT}/backend"
+    --tag "${IMAGE_URI}" --push "${BUILD_CONTEXT}"
 fi
 
 # Keep the running service pinned to its previous release while preparing a new task revision.

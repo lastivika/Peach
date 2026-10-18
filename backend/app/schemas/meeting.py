@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.agenda import AISuggestion, ParsedAgenda
+
 
 class MeetingFields(BaseModel):
     title: str = Field(min_length=1, max_length=200)
@@ -33,6 +35,8 @@ class MeetingUpdate(BaseModel):
 
 
 class MeetingRead(MeetingFields):
+    agenda: ParsedAgenda | None = None
+    ai_suggestion: AISuggestion | None = None
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     created_at: datetime

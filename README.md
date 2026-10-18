@@ -39,3 +39,11 @@ This deployment uses CloudFront HTTPS hostnames without purchasing a domain.
 The custom-domain / ACM / ALB HTTPS part of the assignment is intentionally omitted.
 
 The older Lambda setup is retained for database continuity; see [historical notes](docs/LEGACY-LAMBDA.md).
+
+## AI agenda suggestions (Lab 6)
+
+Calendar → **Add agenda** opens a manual agenda editor with optional **Paste an
+agenda** parsing through Bedrock. Review the marked suggestions and press Save;
+only the authenticated main API writes to the database. See [Lab 6 setup](docs/LAB6.md),
+[ADR 0006](docs/adr/0006-llm-agenda-parsing.md), and
+[the container diagram](docs/ARCHITECTURE.md).

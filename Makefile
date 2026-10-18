@@ -101,3 +101,14 @@ report-now: ## Queue one intentional weekly report (may send email): make report
 	@queue_url=$$(aws cloudformation describe-stacks --stack-name "$${REPORT_STACK:-peach-weekly-meetings-report}" --query "Stacks[0].Outputs[?OutputKey=='ReportQueueUrl'].OutputValue | [0]" --output text --region "$${AWS_REGION:-us-east-1}" --profile "$${AWS_PROFILE:-peach-lab}"); \
 	  test -n "$$queue_url" && test "$$queue_url" != None || { echo 'Report stack or ReportQueueUrl output not found' >&2; exit 1; }; \
 	  aws sqs send-message --queue-url "$$queue_url" --message-body '{"week":"$(WEEK)","source":"manual"}' --region "$${AWS_REGION:-us-east-1}" --profile "$${AWS_PROFILE:-peach-lab}" --query MessageId --output text
+
+.PHONY: llm-hello parse deploy-ai
+export TEXT
+llm-hello: ## Verify Bedrock access and print response, stop reason and usage
+	cd backend && AWS_PROFILE=$${AWS_PROFILE:-peach-lab} AWS_REGION=$${AWS_REGION:-us-east-1} uv run python -m app.ai.cli hello
+
+parse: ## Parse TEXT into a validated agenda using Bedrock
+	cd backend && AWS_PROFILE=$${AWS_PROFILE:-peach-lab} AWS_REGION=$${AWS_REGION:-us-east-1} uv run python -m app.ai.cli parse
+
+deploy-ai: ## Deploy the authenticated agenda parser outside the VPC
+	./scripts/deploy-ai.sh
