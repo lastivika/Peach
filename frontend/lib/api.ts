@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  agendaSchema,
+  suggestionSchema,
+  type Agenda,
+  type Suggestion,
+} from "@/lib/agenda";
 
 import { getIdToken, signOut } from "@/lib/auth";
 
@@ -97,6 +103,8 @@ export const itemInputSchema = z.object({
 });
 
 export const meetingSchema = z.object({
+  agenda: agendaSchema.nullable().optional(),
+  ai_suggestion: suggestionSchema.nullable().optional(),
   id: z.string(),
   title: z.string(),
   start_at: z.string(),
@@ -172,6 +180,11 @@ export const api = {
     request(`/api/v1/meetings/${id}`, meetingSchema, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    }),
+  saveAgenda: (id: string, agenda: Agenda, ai_suggestion: Suggestion | null) =>
+    request(`/api/v1/meetings/${id}/agenda`, meetingSchema, {
+      method: "PUT",
+      body: JSON.stringify({ agenda, ai_suggestion }),
     }),
   deleteMeeting: (id: string) =>
     request(`/api/v1/meetings/${id}`, z.undefined(), { method: "DELETE" }),

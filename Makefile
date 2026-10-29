@@ -78,8 +78,7 @@ cert-api: ## Request the regional ACM API certificate and print its validation C
 deploy-lambda: ## Legacy deployment retained for rollback; not the lab backend
 	./scripts/deploy-lambda.sh
 
-deploy-cognito: ## Deploy Cognito managed login with email/password and Google
-	./scripts/deploy-cognito.sh
+deploy-cognito: infra-plan ## Plan Cognito infrastructure through HCP Terraform
 
 cert: ## Request + DNS-validate a us-east-1 certificate for the frontend: make cert DOMAIN=app.example.com
 	./scripts/domain-frontend.sh cert
@@ -98,6 +97,29 @@ github-role: ## Create the IAM role GitHub Actions assumes to deploy (OIDC, no k
 
 report-now: ## Queue one intentional weekly report (may send email): make report-now WEEK=2026-W39
 	@python3 -c 'import datetime, re, sys; w="$(WEEK)"; (sys.exit("WEEK must be a valid ISO week in YYYY-Www format") if not re.fullmatch(r"[0-9]{4}-W[0-9]{2}", w) else datetime.date.fromisocalendar(int(w[:4]), int(w[-2:]), 1))' 2>/dev/null || { echo 'Set WEEK to a valid ISO week, for example 2026-W39' >&2; exit 2; }
-	@queue_url=$$(aws cloudformation describe-stacks --stack-name "$${REPORT_STACK:-peach-weekly-meetings-report}" --query "Stacks[0].Outputs[?OutputKey=='ReportQueueUrl'].OutputValue | [0]" --output text --region "$${AWS_REGION:-us-east-1}" --profile "$${AWS_PROFILE:-peach-lab}"); \
-	  test -n "$$queue_url" && test "$$queue_url" != None || { echo 'Report stack or ReportQueueUrl output not found' >&2; exit 1; }; \
+	@queue_url=$$($(TF) -chdir=infra output -raw report_queue_url); \
+	  test -n "$$queue_url" && test "$$queue_url" != None || { echo 'Terraform report_queue_url output not found' >&2; exit 1; }; \
 	  aws sqs send-message --queue-url "$$queue_url" --message-body '{"week":"$(WEEK)","source":"manual"}' --region "$${AWS_REGION:-us-east-1}" --profile "$${AWS_PROFILE:-peach-lab}" --query MessageId --output text
+
+.PHONY: llm-hello parse deploy-ai
+export TEXT
+llm-hello: ## Verify Bedrock access and print response, stop reason and usage
+	cd backend && AWS_PROFILE=$${AWS_PROFILE:-peach-lab} AWS_REGION=$${AWS_REGION:-us-east-1} uv run python -m app.ai.cli hello
+
+parse: ## Parse TEXT into a validated agenda using Bedrock
+	cd backend && AWS_PROFILE=$${AWS_PROFILE:-peach-lab} AWS_REGION=$${AWS_REGION:-us-east-1} uv run python -m app.ai.cli parse
+
+deploy-ai: infra-plan ## Plan agenda parser infrastructure through HCP Terraform
+
+TF ?= terraform
+.PHONY: infra-init infra-fmt infra-validate infra-plan infra-outputs
+infra-init: ## Initialize the configured HCP Terraform workspace
+	$(TF) -chdir=infra init
+infra-fmt: ## Format infrastructure definitions
+	$(TF) -chdir=infra fmt -recursive
+infra-validate: ## Validate infrastructure without changing AWS
+	$(TF) -chdir=infra validate
+infra-plan: ## Plan infrastructure in HCP Terraform; applies follow reviewed merges
+	$(TF) -chdir=infra plan
+infra-outputs: ## Read infrastructure outputs from remote state
+	$(TF) -chdir=infra output

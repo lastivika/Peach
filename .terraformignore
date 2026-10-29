@@ -1,0 +1,14 @@
+# HCP needs only the root Terraform source and provider lock file.
+*
+!infra/
+infra/*
+!infra/*.tf
+!infra/terraform.tfvars
+!infra/.terraform.lock.hcl
+# Defense in depth for nested local artifacts.
+**/.terraform/**
+**/*.tfstate*
+**/*.tfplan
+**/*.secret.tfvars*
+submission/**
+.env*

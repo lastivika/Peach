@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import CurrentUser
 from app.db import SessionDep
 from app.models import User
+from app.schemas.agenda import AgendaSave
 from app.schemas.meeting import MeetingCreate, MeetingList, MeetingRead, MeetingUpdate
 from app.services import meetings as service
 
@@ -56,3 +57,17 @@ async def update_meeting(
 async def delete_meeting(meeting_id: uuid.UUID, session: SessionDep, user: CurrentUser):
     await service.delete_meeting(session, await get_or_404(session, user, meeting_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/{meeting_id}/agenda", response_model=MeetingRead)
+async def save_agenda(
+    meeting_id: uuid.UUID, payload: AgendaSave, session: SessionDep, user: CurrentUser
+):
+    meeting = await get_or_404(session, user, meeting_id)
+    meeting.agenda = payload.agenda.model_dump(mode="json")
+    meeting.ai_suggestion = (
+        payload.ai_suggestion.model_dump(mode="json") if payload.ai_suggestion else None
+    )
+    await session.flush()
+    await session.refresh(meeting)
+    return MeetingRead.model_validate(meeting)

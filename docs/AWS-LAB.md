@@ -1,5 +1,9 @@
 # AWS lab
 
+> Lab 7 update: Cognito, reports and parser infrastructure is now managed by
+> [HCP Terraform](LAB7.md). CloudFormation commands below are historical;
+> use `make infra-plan` for those resources.
+
 ## Architecture and deliberate domain exception
 
 This lab uses AWS-issued hostnames; no domain was purchased at the owner's request.

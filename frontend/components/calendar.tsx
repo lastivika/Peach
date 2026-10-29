@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, MapPin, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { AgendaDialog } from "@/components/agenda-dialog";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ const initialForm = (date: Date): MeetingInput => {
 
 export function Calendar() {
   const client = useQueryClient();
+  const [agendaMeeting, setAgendaMeeting] = useState<Meeting | null>(null);
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
@@ -323,6 +325,13 @@ export function Calendar() {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => setAgendaMeeting(meeting)}
+                >
+                  {meeting.agenda ? "View agenda" : "Add agenda"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => beginEdit(meeting)}
                 >
                   Edit
@@ -343,6 +352,13 @@ export function Calendar() {
           ))
         )}
       </section>
+      {agendaMeeting && (
+        <AgendaDialog
+          key={agendaMeeting.id}
+          meeting={agendaMeeting}
+          onClose={() => setAgendaMeeting(null)}
+        />
+      )}
       {form && (
         <section
           className="notion-surface grid gap-4 p-5"

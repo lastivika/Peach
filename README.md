@@ -39,3 +39,21 @@ This deployment uses CloudFront HTTPS hostnames without purchasing a domain.
 The custom-domain / ACM / ALB HTTPS part of the assignment is intentionally omitted.
 
 The older Lambda setup is retained for database continuity; see [historical notes](docs/LEGACY-LAMBDA.md).
+
+## AI agenda suggestions (Lab 6)
+
+Calendar → **Add agenda** opens a manual agenda editor with optional **Paste an
+agenda** parsing through Bedrock. Review the marked suggestions and press Save;
+only the authenticated main API writes to the database. See [Lab 6 setup](docs/LAB6.md),
+[ADR 0006](docs/adr/0006-llm-agenda-parsing.md), and
+[the container diagram](docs/ARCHITECTURE.md).
+
+## Infrastructure migration (Lab 7)
+
+Terraform definitions for Cognito, weekly reports and the agenda parser live in
+`infra/`. See [migration instructions](docs/LAB7.md) and
+[ADR 0007](docs/adr/0007-terraform.md). HCP Terraform owns infrastructure runs;
+GitHub Actions continues deploying the application. All 49 Terraform resources were imported without replacing resources;
+the three former stacks and templates are retired. Run `make infra-init`,
+`make infra-plan`, and `make infra-outputs`; applies run in HCP after review. Submission evidence stays
+local under ignored `submission/lab7/`.

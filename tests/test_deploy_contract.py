@@ -9,7 +9,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SHA = "a" * 40
-REPORT_TEMPLATE = (ROOT / "infra/weekly-meetings-report.yaml").read_text()
+REPORT_TEMPLATE = (ROOT / "infra/reports.tf").read_text()
+REPORT_VARIABLES = (ROOT / "infra/variables.tf").read_text()
 FAKE_TOOL = r'''#!/usr/bin/env python3
 import json, os, pathlib, sys
 args = sys.argv[1:]
@@ -47,18 +48,14 @@ elif cmd.startswith('ecs describe-services'):
 
 class DeployContract(unittest.TestCase):
     def test_weekly_report_schedule_is_disabled_and_sends_directly_to_sqs(self):
-        self.assertIn("Default: DISABLED", REPORT_TEMPLATE)
-        self.assertNotIn("ReservedConcurrentExecutions:", REPORT_TEMPLATE)
-        self.assertIn("MaximumConcurrency: 2", REPORT_TEMPLATE)
-        self.assertIn('ScheduleExpression: "cron(0 7 ? * MON *)"', REPORT_TEMPLATE)
-        self.assertIn("ScheduleExpressionTimezone: Europe/Kyiv", REPORT_TEMPLATE)
-        self.assertIn('FlexibleTimeWindow: {Mode: "OFF"}', REPORT_TEMPLATE)
-        self.assertRegex(
-            REPORT_TEMPLATE,
-            r"WeeklySchedule:[\s\S]*?Target:[\s\S]*?Arn: !GetAtt ReportQueue\.Arn",
-        )
+        self.assertRegex(REPORT_VARIABLES, r'(?s)variable "report_schedule_state".*?default\s*=\s*"DISABLED"')
+        self.assertNotIn("reserved_concurrent_executions", REPORT_TEMPLATE)
+        self.assertIn("maximum_concurrency = 2", REPORT_TEMPLATE)
+        self.assertIn('"cron(0 7 ? * MON *)"', REPORT_TEMPLATE)
+        self.assertIn('"Europe/Kyiv"', REPORT_TEMPLATE)
+        self.assertIn('flexible_time_window { mode = "OFF" }', REPORT_TEMPLATE)
+        self.assertIn('arn      = aws_sqs_queue.reports.arn', REPORT_TEMPLATE)
         self.assertNotIn("DispatcherFunction", REPORT_TEMPLATE)
-        self.assertIn('Input: \'{"source":"schedule"}\'', REPORT_TEMPLATE)
 
     def run_deploy(self, scenario):
         with tempfile.TemporaryDirectory() as directory:
