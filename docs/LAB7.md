@@ -104,3 +104,25 @@ to `organization:peach-lab7:project:Default Project:workspace:peach-dev:run_phas
 AWS permissions were generated with IAM Policy Autopilot, reviewed and scoped
 to existing resources; no AdministratorAccess. The workspace has six variables:
 two OIDC environment variables and four sensitive Terraform inputs.
+
+## Drift exercise
+
+An intentional out-of-band AWS SDK change set the parser timeout from 30 to
+31 seconds. The HCP **plan-only** run detected it and proposed restoring 30:
+https://app.terraform.io/app/peach-lab7/peach-dev/runs/run-jDTAQHnnKryoj6ja
+
+The reviewed HCP apply restored the timeout:
+https://app.terraform.io/app/peach-lab7/peach-dev/runs/run-vjziShiewgPwEh6N
+The provider also normalized its `publish` field from null to false; no version
+was published and no image, environment, user, object or trigger changed.
+For a real emergency fix, record the intended value in a reviewed code change
+before the next apply; otherwise Terraform correctly reverts the console fix.
+
+## VCS demonstration
+
+PR https://github.com/lastivika/Peach/pull/1 adds the reversible
+`Lab7Evidence=vcs-apply` tag to the parser log group. Its HCP speculative plan
+and GitHub checks must pass before merge. This tag does not shorten retention,
+change application behavior or create a billable resource. Remove the tag in
+a later reviewed PR to reverse the demonstration. Run URL and screenshot are
+kept in the local submission bundle after the merge-triggered apply finishes.
