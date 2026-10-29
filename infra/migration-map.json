@@ -1,0 +1,42 @@
+{
+  "cognito.yaml": {
+    "UserPool": ["aws_cognito_user_pool.main"],
+    "GoogleIdentityProvider": ["aws_cognito_identity_provider.google"],
+    "Client": ["aws_cognito_user_pool_client.web"],
+    "Domain": ["aws_cognito_user_pool_domain.main"],
+    "Branding": ["aws_cognito_managed_login_branding.main"]
+  },
+  "ai.yml": {
+    "ParserLogs": ["aws_cloudwatch_log_group.parser"],
+    "ParserRole": ["aws_iam_role.parser", "aws_iam_role_policy.parser"],
+    "Parser": ["aws_lambda_function.parser"],
+    "ParserUrl": ["aws_lambda_function_url.parser"],
+    "UrlPermission": ["aws_lambda_permission.parser_url"],
+    "InvokeViaUrlPermission": ["aws_lambda_permission.parser_invoke"],
+    "MonthlyBudget": ["aws_budgets_budget.ai"]
+  },
+  "weekly-meetings-report.yaml": {
+    "ReportBucket": ["aws_s3_bucket.reports", "aws_s3_bucket_ownership_controls.reports", "aws_s3_bucket_public_access_block.reports", "aws_s3_bucket_server_side_encryption_configuration.reports", "aws_s3_bucket_lifecycle_configuration.reports", "aws_s3_bucket_notification.reports"],
+    "ReportQueueDlq": ["aws_sqs_queue.dlq[\"report\"]"],
+    "ReportQueue": ["aws_sqs_queue.reports"],
+    "SchedulerDlq": ["aws_sqs_queue.dlq[\"scheduler\"]"],
+    "DeliveryDlq": ["aws_sqs_queue.dlq[\"delivery\"]"],
+    "DeliveryDlqPolicy": ["aws_sqs_queue_policy.delivery"],
+    "ReportFunctionSecurityGroup": ["aws_security_group.report"],
+    "DatabaseIngress": ["aws_vpc_security_group_ingress_rule.database"],
+    "S3GatewayEndpoint": ["aws_vpc_endpoint.s3[0]"],
+    "ReportFunctionRole": ["aws_iam_role.report[\"worker\"]", "aws_iam_role_policy_attachment.report_vpc", "aws_iam_role_policy.report_objects", "aws_iam_role_policy.report_queue", "aws_iam_role_policy.report_logs[\"worker\"]"],
+    "ReportFunctionLogGroup": ["aws_cloudwatch_log_group.report[\"worker\"]"],
+    "ReportFunction": ["aws_lambda_function.report_worker"],
+    "ReportQueueMapping": ["aws_lambda_event_source_mapping.reports"],
+    "DeliveryFunctionRole": ["aws_iam_role.report[\"delivery\"]", "aws_iam_role_policy.delivery", "aws_iam_role_policy.delivery_failures", "aws_iam_role_policy.report_logs[\"delivery\"]"],
+    "DeliveryFunctionLogGroup": ["aws_cloudwatch_log_group.report[\"delivery\"]"],
+    "DeliveryFunction": ["aws_lambda_function.report_delivery"],
+    "DeliveryPermission": ["aws_lambda_permission.report_delivery"],
+    "ReportCreatedRule": ["aws_cloudwatch_event_rule.report_created", "aws_cloudwatch_event_target.report_delivery"],
+    "DeliveryAsyncFailureConfig": ["aws_lambda_function_event_invoke_config.delivery"],
+    "SchedulerGroup": ["aws_scheduler_schedule_group.reports"],
+    "SchedulerRole": ["aws_iam_role.scheduler", "aws_iam_role_policy.scheduler"],
+    "WeeklySchedule": ["aws_scheduler_schedule.reports"]
+  }
+}

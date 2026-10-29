@@ -1,5 +1,9 @@
 # Weekly meetings report lab
 
+> Lab 7 update: Cognito, reports and parser infrastructure is now managed by
+> [HCP Terraform](LAB7.md). CloudFormation commands below are historical;
+> use `make infra-plan` for those resources.
+
 This optional pipeline reuses Peach's existing `meetings` table and PostgreSQL
 connection. It does not create another meeting store or add participant
 relationships. `Meeting.owner_id` is the available organizer identifier.

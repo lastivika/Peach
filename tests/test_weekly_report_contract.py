@@ -1,94 +1,56 @@
-"""Local CloudFormation contract checks for the report's retry paths."""
-
+"""Preserve the report retry, data-access and schedule contracts in Terraform."""
 import re
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = (ROOT / "infra/weekly-meetings-report.yaml").read_text()
+TEMPLATE = (ROOT / 'infra/reports.tf').read_text()
 
 
-def resource(name: str) -> str:
-    match = re.search(
-        rf"(?ms)^  {re.escape(name)}:\n(.*?)(?=^  [A-Za-z][A-Za-z0-9]*:\n|\Z)",
-        TEMPLATE,
-    )
+def resource(kind, name):
+    match = re.search(rf'(?ms)^resource "{kind}" "{name}" {{\n(.*?)(?=^resource |^data |\Z)', TEMPLATE)
     if match is None:
-        raise AssertionError(f"CloudFormation resource {name} is missing")
+        raise AssertionError(f'Missing {kind}.{name}')
     return match.group(1)
 
 
 class WeeklyReportContract(unittest.TestCase):
-    def test_report_queue_uses_three_receives_and_adequate_visibility(self):
-        queue = resource("ReportQueue")
-        self.assertIn("VisibilityTimeout: 720", queue)
-        self.assertIn("deadLetterTargetArn: !GetAtt ReportQueueDlq.Arn", queue)
-        self.assertIn("maxReceiveCount: 3", queue)
-        self.assertIn("Timeout: 120", resource("ReportFunction"))
+    def test_report_queue_retry_and_visibility(self):
+        queue = resource('aws_sqs_queue', 'reports')
+        self.assertRegex(queue, r'visibility_timeout_seconds\s*= 720')
+        self.assertIn('maxReceiveCount = 3', queue)
+        self.assertIn('aws_sqs_queue.dlq["report"].arn', queue)
+        self.assertRegex(resource('aws_lambda_function', 'report_worker'), r'timeout\s*= 120')
 
-    def test_delivery_and_scheduler_failures_have_dlq_destinations(self):
-        event_rule = resource("ReportCreatedRule")
-        self.assertIn("Arn: !GetAtt DeliveryDlq.Arn", event_rule)
-        self.assertIn("MaximumRetryAttempts: 5", event_rule)
+    def test_failure_destinations_and_retries(self):
+        for kind, name, dlq, retries in [('aws_cloudwatch_event_target', 'report_delivery', 'delivery', 5), ('aws_lambda_function_event_invoke_config', 'delivery', 'delivery', 2), ('aws_scheduler_schedule', 'reports', 'scheduler', 5)]:
+            block = resource(kind, name)
+            self.assertIn(f'aws_sqs_queue.dlq["{dlq}"].arn', block)
+            self.assertRegex(block, rf'maximum_retry_attempts\s*= {retries}')
 
-        async_failure = resource("DeliveryAsyncFailureConfig")
-        self.assertIn("MaximumRetryAttempts: 2", async_failure)
-        self.assertIn("Destination: !GetAtt DeliveryDlq.Arn", async_failure)
+    def test_disabled_mapping_and_s3_events(self):
+        mapping = resource('aws_lambda_event_source_mapping', 'reports')
+        self.assertIn('maximum_concurrency = 2', mapping)
+        self.assertRegex(mapping, r'enabled\s*= var.report_queue_enabled')
+        self.assertIn('eventbridge = true', resource('aws_s3_bucket_notification', 'reports'))
+        rule = resource('aws_cloudwatch_event_rule', 'report_created')
+        self.assertIn('source = ["aws.s3"]', rule)
+        self.assertIn('prefix = "reports/"', rule)
 
-        schedule = resource("WeeklySchedule")
-        self.assertIn("Arn: !GetAtt SchedulerDlq.Arn", schedule)
-        self.assertIn("State: !Ref ScheduleState", schedule)
+    def test_scheduler_trust_and_access_scope(self):
+        role = resource('aws_iam_role', 'scheduler')
+        for expected in ['scheduler.amazonaws.com', 'sts:AssumeRole', 'aws:SourceAccount', 'aws:SourceArn', 'aws_scheduler_schedule_group.reports.arn']:
+            self.assertIn(expected, role)
+        policy = resource('aws_iam_role_policy', 'scheduler')
+        self.assertIn('Action = ["sqs:SendMessage"]', policy)
+        self.assertNotRegex(policy, r'ses:|s3:|secretsmanager:|rds:')
 
-    def test_event_source_concurrency_and_s3_event_configuration(self):
-        mapping = resource("ReportQueueMapping")
-        self.assertIn("MaximumConcurrency: 2", mapping)
-        self.assertNotIn("ReservedConcurrentExecutions", resource("ReportFunction"))
-
-        bucket = resource("ReportBucket")
-        self.assertIn("EventBridgeEnabled: true", bucket)
-        event_rule = resource("ReportCreatedRule")
-        self.assertIn("source: [aws.s3]", event_rule)
-        self.assertIn("prefix: reports/", event_rule)
-
-    def test_scheduler_trust_is_scoped_to_its_schedule_group(self):
-        role = resource("SchedulerRole")
-        self.assertIn("Service: scheduler.amazonaws.com", role)
-        self.assertIn("Action: sts:AssumeRole", role)
-        self.assertIn("aws:SourceAccount: !Ref AWS::AccountId", role)
-        self.assertIn("aws:SourceArn: !GetAtt SchedulerGroup.Arn", role)
-        self.assertNotIn(":schedule/", role)
-        self.assertIn("Action: [sqs:SendMessage]", role)
-        self.assertIn("!GetAtt ReportQueue.Arn, !GetAtt SchedulerDlq.Arn", role)
-        self.assertNotRegex(role, r"ses:|s3:|secretsmanager:|rds:")
-
-        schedule = resource("WeeklySchedule")
-        self.assertIn("GroupName: !Ref SchedulerGroup", schedule)
-        self.assertIn("RoleArn: !GetAtt SchedulerRole.Arn", schedule)
-
-    def test_schedule_arn_output_uses_group_and_schedule_names(self):
-        self.assertRegex(
-            TEMPLATE,
-            r'ScheduleArn:\n    Value: !Sub "arn:\$\{AWS::Partition\}:scheduler:'
-            r"\$\{AWS::Region\}:\$\{AWS::AccountId\}:schedule/"
-            r'\$\{SchedulerGroup\}/\$\{ProjectName\}-weekly-meetings"',
-        )
-        self.assertNotIn("!GetAtt WeeklySchedule.Arn", TEMPLATE)
-
-    def test_report_list_permission_is_scoped_to_report_prefix(self):
-        endpoint = resource("S3GatewayEndpoint")
-        self.assertRegex(
-            endpoint,
-            r"(?s)Action: \[s3:ListBucket\].*?Resource: !GetAtt ReportBucket\.Arn"
-            r".*?s3:prefix: reports/\*",
-        )
-
-        role = resource("ReportFunctionRole")
-        self.assertRegex(
-            role,
-            r"(?s)Action: \[s3:ListBucket\].*?Resource: !GetAtt ReportBucket\.Arn"
-            r".*?s3:prefix: reports/\*",
-        )
+    def test_report_list_is_prefix_scoped(self):
+        for kind, name in [('aws_vpc_endpoint', 's3'), ('aws_iam_role_policy', 'report_objects')]:
+            block = resource(kind, name)
+            self.assertIn('Action = ["s3:ListBucket"]', block)
+            self.assertIn('"s3:prefix" = "reports/*"', block)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

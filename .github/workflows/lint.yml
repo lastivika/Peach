@@ -21,8 +21,13 @@ jobs:
           python-version: "3.13"
       - run: pip install cfn-lint==1.57.1
       - run: >-
-          cfn-lint infra/ecs-backend.yaml infra/weekly-meetings-report.yaml infra/ai.yml
-          infra/github-oidc.yaml infra/frontend.yaml infra/cognito.yaml
+          cfn-lint infra/ecs-backend.yaml infra/github-oidc.yaml infra/frontend.yaml
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.17.1"
+      - run: terraform -chdir=infra init -backend=false -input=false
+      - run: terraform -chdir=infra fmt -check
+      - run: terraform -chdir=infra validate
       - run: bash -n scripts/*.sh
       - run: python -m unittest discover -s tests -v
 

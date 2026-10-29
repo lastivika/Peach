@@ -45,6 +45,8 @@ jobs:
           API_CORS_ORIGINS: ${{ vars.API_CORS_ORIGINS }}
           AWS_SUBNET_IDS: ${{ vars.AWS_SUBNET_IDS }}
           AWS_VPC_ID: ${{ vars.AWS_VPC_ID }}
+          COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID }}
+          COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
           DATABASE_STACK_NAME: ${{ vars.DATABASE_STACK_NAME }}
           DATABASE_URL_SECRET_ARN: ${{ vars.DATABASE_URL_SECRET_ARN }}
           DATABASE_SECURITY_GROUP_ID: ${{ vars.DATABASE_SECURITY_GROUP_ID }}
@@ -76,3 +78,7 @@ jobs:
           AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
           PROJECT_NAME: ${{ vars.PROJECT_NAME || 'peach' }}
           BACKEND_URL: ${{ needs.backend.outputs.backend_url }}
+          COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID }}
+          COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
+          COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
+          NEXT_PUBLIC_AGENDA_PARSER_URL: ${{ vars.NEXT_PUBLIC_AGENDA_PARSER_URL }}

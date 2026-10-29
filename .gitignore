@@ -31,3 +31,13 @@ pgdata/
 
 # --- submission artifacts (kept locally) ---
 submission/
+
+# Terraform state, plans and local credentials
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+*.secret.tfvars
+*.secret.tfvars.json

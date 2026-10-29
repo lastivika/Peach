@@ -1,4 +1,8 @@
 > Current deployed-model target: Amazon Nova Pro (`amazon.nova-pro-v1:0`). The
+
+> Lab 7 update: Cognito, reports and parser infrastructure is now managed by
+> [HCP Terraform](LAB7.md). CloudFormation commands below are historical;
+> use `make infra-plan` for those resources.
 > user approved this substitution because AWS denied Opus 5.5 access. See ADR 0006.
 > Nova uses Converse and the selected-Region model ARN; no Anthropic activation
 > step is needed for Nova. Configure matching token rates whenever changing models.

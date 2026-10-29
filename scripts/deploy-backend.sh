@@ -34,8 +34,8 @@ output() {
     --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text
 }
 CF_PREFIX_LIST="$(aws ec2 describe-managed-prefix-lists --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing --query 'PrefixLists[0].PrefixListId' --output text)"
-COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-$(output "${PROJECT_NAME}-cognito" UserPoolId)}"
-COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-$(output "${PROJECT_NAME}-cognito" ClientId)}"
+COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-$("${TF:-terraform}" -chdir="${ROOT}/infra" output -raw cognito_user_pool_id)}"
+COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-$("${TF:-terraform}" -chdir="${ROOT}/infra" output -raw cognito_client_id)}"
 # Reuse the existing Aurora database; no data is copied or destroyed during migration to ECS.
 DATABASE_URL_SECRET_ARN="${DATABASE_URL_SECRET_ARN:-$(output "${DATABASE_STACK}" DatabaseUrlSecretArn)}"
 DATABASE_SECURITY_GROUP_ID="${DATABASE_SECURITY_GROUP_ID:-$(aws cloudformation describe-stack-resource \
