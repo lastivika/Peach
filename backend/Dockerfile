@@ -57,6 +57,10 @@ EXPOSE 8000
 
 CMD ["./scripts/entrypoint.sh"]
 
+# GCP target: preserves existing AWS runtime/entrypoint behavior.
+FROM runtime AS cloudrun
+EXPOSE 8080
+CMD ["sh", "./scripts/cloud-run.sh"]
 
 # --- lambda: what scripts/deploy-backend.sh ships to AWS Lambda ---
 # AWS's base image carries the runtime interface client. The virtualenv from

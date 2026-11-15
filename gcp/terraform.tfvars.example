@@ -1,0 +1,10 @@
+# Public identifiers only. Copy to terraform.tfvars (ignored).
+cognito_region       = "us-east-1"
+cognito_user_pool_id = "REPLACE_WITH_EXISTING_POOL_ID"
+cognito_client_id    = "REPLACE_WITH_EXISTING_CLIENT_ID"
+hcp_workspace_id    = "" # immutable ws-... ID for peach-gcp-dev
+# Stage 1: infrastructure only. Stage 2: image digest + job. Stage 3: migrated API.
+image                = ""
+migration_image      = "" # later releases: migrate this digest before promoting image
+enable_migration_job = false
+enable_api           = false

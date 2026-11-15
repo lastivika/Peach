@@ -57,3 +57,45 @@ GitHub Actions continues deploying the application. All 49 Terraform resources w
 the three former stacks and templates are retired. Run `make infra-init`,
 `make infra-plan`, and `make infra-outputs`; applies run in HCP after review. Submission evidence stays
 local under ignored `submission/lab7/`.
+
+## Google Cloud deployment (Lab 9)
+
+Peach also runs on GCP project `peach-lab9-2026` (us-central1):
+
+- Frontend: https://peach-lab9-2026.web.app (Firebase Hosting, static Next.js export)
+- API: https://peach-api-u2sij2lmoa-uc.a.run.app (Cloud Run, same FastAPI image, no Mangum)
+- Database: Cloud SQL PostgreSQL 16 `db-f1-micro`, 10 GiB SSD; schema created by
+  running Alembic migrations on an empty database (no `pg_dump` from Aurora)
+
+Terraform lives in `gcp/` with its own HCP state (`peach-lab7/peach-gcp-dev`);
+AWS state in `infra/` (`peach-dev`) is untouched. Decisions: [ADR 0009](docs/adr/0009-gcp-multicloud.md).
+
+**Deploy to GCP** (details in the [Lab 9 runbook](docs/LAB9.md)):
+
+```sh
+gcloud auth application-default login            # no JSON keys
+terraform -chdir=gcp init && terraform -chdir=gcp apply   # APIs, SAs, SQL, secret, registry
+docker buildx build --platform linux/amd64 --target cloudrun --push \
+  -t us-central1-docker.pkg.dev/peach-lab9-2026/peach/backend:<tag> backend
+# set image=<digest>, enable_migration_job=true -> apply
+gcloud run jobs execute peach-migrate --region us-central1 --wait
+# set enable_api=true -> apply
+bash scripts/gcp/build-frontend.sh               # NEXT_PUBLIC_API_URL = Cloud Run URL
+firebase deploy --only hosting --project peach-lab9-2026
+```
+
+**Still on AWS:** Cognito sign-in (Firebase URLs added to the callback/logout
+lists), the weekly report pipeline (EventBridge, SQS, Lambda, SES) and the
+Bedrock agenda parser. GCP meetings are not included in the AWS weekly report.
+
+**Stop / start the database** (Cloud SQL does not pause on its own; storage is
+still billed while stopped):
+
+```sh
+gcloud sql instances patch peach-postgres --project peach-lab9-2026 --activation-policy=NEVER   # stop
+gcloud sql instances patch peach-postgres --project peach-lab9-2026 --activation-policy=ALWAYS  # start
+```
+
+**Clean up:** set `deletion_protection=false` in `gcp/terraform.tfvars`, apply,
+then `terraform -chdir=gcp destroy` and `firebase hosting:disable --project peach-lab9-2026`.
+Costs and evidence: [submission worksheet](docs/LAB9-SUBMISSION.md).

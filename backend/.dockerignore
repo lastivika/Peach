@@ -6,3 +6,8 @@ __pycache__/
 .mypy_cache/
 .git/
 tests/__pycache__/
+
+# Never bake local configuration or credentials into any cloud image.
+.env
+.env.*
+*.credentials.json

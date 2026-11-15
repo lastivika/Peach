@@ -49,14 +49,26 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
   supported_identity_providers         = ["COGNITO", "Google"]
-  callback_urls                        = ["${var.site_url}/auth/callback/", "http://localhost:3000/auth/callback/", "${var.site_url}/callback", "http://localhost:3000/callback"]
-  logout_urls                          = ["${var.site_url}/", "http://localhost:3000/"]
-  prevent_user_existence_errors        = "ENABLED"
-  enable_token_revocation              = true
-  id_token_validity                    = 1
-  access_token_validity                = 1
-  refresh_token_validity               = 1
-  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH"]
+  callback_urls = concat(
+    ["${var.site_url}/auth/callback/", "http://localhost:3000/auth/callback/", "${var.site_url}/callback", "http://localhost:3000/callback"],
+    [
+      "https://peach-lab9-2026.web.app/auth/callback/",
+      "https://peach-lab9-2026.firebaseapp.com/auth/callback/",
+    ]
+  )
+  logout_urls = concat(
+    ["${var.site_url}/", "http://localhost:3000/"],
+    [
+      "https://peach-lab9-2026.web.app/",
+      "https://peach-lab9-2026.firebaseapp.com/",
+    ]
+  )
+  prevent_user_existence_errors = "ENABLED"
+  enable_token_revocation       = true
+  id_token_validity             = 1
+  access_token_validity         = 1
+  refresh_token_validity        = 1
+  explicit_auth_flows           = ["ALLOW_USER_SRP_AUTH"]
   # AWS omits token validity units when using its hours/hours/days defaults.
 
   refresh_token_rotation {
