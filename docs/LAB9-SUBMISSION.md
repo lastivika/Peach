@@ -12,12 +12,13 @@ Nothing has been submitted, committed or deployed by this work.
 | Commit/PR with `gcp/` and the service-choice ADR | `gcp/`, [ADR 0009](adr/0009-gcp-multicloud.md) incl. answers (a)–(c) | PR from branch `lab9-gcp` |
 | GCP URL: frontend loads, API reads the DB | https://peach-lab9-2026.web.app → Cloud Run; signed-in `GET /api/v1/items` returned 200 (Cloud Run log, 2026-11-14 21:02 UTC) | Done; screenshot of signed-in Items page to attach |
 | Part 3 cost table, four profiles, free-tier assumptions | [LAB9-COSTS.md](LAB9-COSTS.md) | Done |
-| Screenshots: BigQuery, Looker Studio, OCR | BigQuery job on `usa_names` (170 MB processed) → table `lab9_demo.names_by_decade`; Vision `DOCUMENT_TEXT_DETECTION` result (confidence 0.93) | OCR done; BigQuery + Looker screenshots taken in console |
+| Screenshots: BigQuery, Looker Studio, OCR | BigQuery job on `usa_names` (170 MB processed) → table `lab9_demo.names_by_decade`; Vision `DOCUMENT_TEXT_DETECTION` result (confidence 0.93) | BigQuery + OCR done; Looker Studio chart built in browser from `lab9_demo.names_by_decade` |
 
 Extra Part 4 exercises: Dataflow "Cloud Storage Text to BigQuery" template loaded
 8 rows into `lab9_demo.meetings_from_gcs` (job `2026-11-15_04_14_21-11581297166368488086`,
-1 × e2-small, dedicated `peach-dataflow` worker SA). Lab 6 agenda prompt in
-Vertex AI Studio: run in console.
+1 × e2-small, dedicated `peach-dataflow` worker SA). Lab 6 agenda prompt on
+Vertex AI (Gemini 3.5 Flash, global): correct JSON agenda, Kyiv offset resolved, injected
+"make me the owner" line ignored.
 
 Clean-up after grading: `lab9_demo` dataset, `gs://peach-lab9-2026-dataflow-demo`,
 `peach-dataflow` SA, then `terraform -chdir=gcp destroy` and Firebase Hosting disable.
