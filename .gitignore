@@ -41,3 +41,12 @@ tfplan
 crash.log
 *.secret.tfvars
 *.secret.tfvars.json
+
+# GCP local inputs, Firebase cache and credential artifacts
+gcp/terraform.tfvars
+gcp/*.auto.tfvars
+gcp/*.auto.tfvars.json
+.firebase/
+firebase-debug.log*
+*-firebase-adminsdk-*.json
+*.credentials.json

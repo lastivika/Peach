@@ -9,6 +9,13 @@ import { AgendaDialog } from "@/components/agenda-dialog";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +55,7 @@ export function Calendar() {
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
   const [selected, setSelected] = useState(() => dateKey(new Date()));
+  const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Meeting | null>(null);
   const [form, setForm] = useState<MeetingInput>(() => initialForm(new Date()));
   const [formError, setFormError] = useState("");
@@ -84,8 +92,7 @@ export function Calendar() {
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["meetings"] });
       toast.success(editing ? "Meeting updated" : "Meeting created");
-      setEditing(null);
-      setFormError("");
+      closeForm();
     },
     onError: (err: Error) => setFormError(err.message),
   });
@@ -98,13 +105,21 @@ export function Calendar() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  function closeForm() {
+    setFormOpen(false);
+    setEditing(null);
+    setFormError("");
+  }
+
   function beginCreate() {
+    setFormOpen(true);
     const date = new Date(`${selected}T12:00:00`);
     setEditing(null);
     setForm(initialForm(date));
     setFormError("");
   }
   function beginEdit(meeting: Meeting) {
+    setFormOpen(true);
     setEditing(meeting);
     setForm({
       title: meeting.title,
@@ -359,19 +374,21 @@ export function Calendar() {
           onClose={() => setAgendaMeeting(null)}
         />
       )}
-      {form && (
-        <section
-          className="notion-surface grid gap-4 p-5"
-          aria-label={editing ? "Edit meeting" : "Create meeting"}
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
+      <Dialog
+        open={formOpen}
+        onOpenChange={(open) => {
+          if (!open) closeForm();
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
               {editing ? "Edit meeting" : "New meeting"}
-            </h2>
-            <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>
-              Close
-            </Button>
-          </div>
+            </DialogTitle>
+            <DialogDescription>
+              Enter the meeting details and save your changes.
+            </DialogDescription>
+          </DialogHeader>
           {formError && (
             <p role="alert" className="text-sm text-destructive">
               {formError}
@@ -429,7 +446,7 @@ export function Calendar() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditing(null)}>
+            <Button variant="outline" onClick={closeForm}>
               Cancel
             </Button>
             <Button
@@ -449,8 +466,8 @@ export function Calendar() {
               {save.isPending ? "Saving…" : "Save meeting"}
             </Button>
           </div>
-        </section>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

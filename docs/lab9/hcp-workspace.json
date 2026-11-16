@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "workspaces",
+    "attributes": {
+      "name": "peach-gcp-dev",
+      "description": "Peach Lab 9 GCP only; ADC bootstrap, then HCP workload identity federation.",
+      "execution-mode": "local",
+      "working-directory": "gcp",
+      "terraform-version": "1.13.5",
+      "auto-apply": false,
+      "global-remote-state": false
+    }
+  }
+}
